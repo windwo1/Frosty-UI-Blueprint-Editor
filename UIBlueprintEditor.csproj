@@ -1,0 +1,63 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+	<PropertyGroup>
+		<Configurations>Developer;Release</Configurations>
+		<Platforms>x64</Platforms>
+		<TargetFrameworks>net48</TargetFrameworks>
+		<AssemblyTitle>UIBlueprintEditorPlugin</AssemblyTitle>
+		<Product>UIBlueprintEditorPlugin</Product>
+		<Copyright>Copyright ©  2020</Copyright>
+		<CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<UseWPF>true</UseWPF>
+		<OutputType>Library</OutputType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Developer|x64'">
+		<DebugSymbols>true</DebugSymbols>
+		<OutputPath>bin\Developer\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+		<OutputPath>bin\Release\Final\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<MakeDir Directories="$(SolutionDir)$(OutDir)Plugins" />
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SolutionDir)$(OutDir)Plugins" SkipUnchangedFiles="true" />
+	</Target>
+
+	<ItemGroup>
+	  <None Remove="Images\Grid.png" />
+	  <None Remove="Images\Refresh.png" />
+	  <None Remove="Images\UITypeIcon.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="FrostyControls">
+		  <HintPath>..\..\..\gw2 stuff\FrostyEditor\FrostyControls.dll</HintPath>
+		</Reference>
+		<Reference Include="FrostyCore">
+			<HintPath>D:\Documents\gw2 stuff\FrostyEditor\FrostyCore.dll</HintPath>
+		</Reference>
+		<Reference Include="FrostyHash">
+		  <HintPath>..\..\..\gw2 stuff\FrostyEditor\FrostyHash.dll</HintPath>
+		</Reference>
+		<Reference Include="FrostySdk">
+			<HintPath>D:\Documents\gw2 stuff\FrostyEditor\FrostySdk.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.CSharp" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Images\Grid.png" />
+	  <Resource Include="Images\Refresh.png" />
+	  <Resource Include="Images\UITypeIcon.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="UIBlueprintEditor.cs" />
+	</ItemGroup>
+</Project>

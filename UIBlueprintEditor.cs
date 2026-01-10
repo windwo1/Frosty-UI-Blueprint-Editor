@@ -1,0 +1,213 @@
+﻿using Frosty.Core;
+using Frosty.Core.Controls;
+using FrostySdk.Ebx;
+using FrostySdk.Interfaces;
+using FrostySdk.IO;
+using FrostySdk.Managers;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Animation;
+
+namespace UIBlueprintEditor
+{
+    [TemplatePart(Name = PART_SwitchView, Type = typeof(Button))]
+    [TemplatePart(Name = PART_DefaultEditorLayer, Type = typeof(Grid))]
+    [TemplatePart(Name = PART_UIEditorLayer, Type = typeof(Grid))]
+    [TemplatePart(Name = PART_AddObject, Type = typeof(Button))]
+    [TemplatePart(Name = PART_UISize, Type = typeof(Grid))]
+    [TemplatePart(Name = PART_UICanvas, Type = typeof(Canvas))]
+    [TemplatePart(Name = PART_Refresh, Type = typeof(Button))]
+    public class UIEditor : FrostyAssetEditor
+    {
+        private const string PART_SwitchView = "PART_SwitchView";
+        private const string PART_DefaultEditorLayer = "PART_DefaultEditorLayer";
+        private const string PART_UIEditorLayer = "PART_UIEditorLayer";
+        private const string PART_AddObject = "PART_AddObject";
+        private const string PART_UISize = "PART_UISize";
+        private const string PART_TemplateUI = "PART_TemplateUI";
+        private const string PART_UICanvas = "PART_UICanvas";
+        private const string PART_Refresh = "PART_Refresh";
+
+        private Button _switchViewButton;
+        private FrameworkElement _uiEditorLayer;
+        private FrameworkElement _defaultEditorLayer;
+        private Button _addObjectButton;
+        private FrameworkElement _uiSize;
+        private Canvas _uiCanvas;
+        private Button _refreshButton;
+
+        private bool _isEditorActive = false;
+
+        public UIEditor(ILogger inLogger) : base(inLogger)
+        {
+            // App.Logger.Log(App.SelectedAsset.Type.ToString());
+        }
+        static UIEditor()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(UIEditor), new FrameworkPropertyMetadata(typeof(UIEditor)));
+        }
+
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+
+            _uiEditorLayer = GetTemplateChild(PART_UIEditorLayer) as FrameworkElement;
+            _defaultEditorLayer = GetTemplateChild(PART_DefaultEditorLayer) as FrameworkElement;
+
+            _switchViewButton = GetTemplateChild(PART_SwitchView) as Button;
+            _switchViewButton.Click += switchViewButton_Click;
+
+            _addObjectButton = GetTemplateChild(PART_AddObject) as Button;
+            _addObjectButton.Click += addObjectButton_Click;
+
+            _uiSize = GetTemplateChild(PART_UISize) as FrameworkElement;
+
+            _uiCanvas = GetTemplateChild(PART_UICanvas) as Canvas;
+
+            _refreshButton = GetTemplateChild(PART_Refresh) as Button;
+            _refreshButton.Click += refreshButton_Click;
+        }
+
+        private void switchViewButton_Click(object sender, RoutedEventArgs e)
+        {
+            _isEditorActive = !_isEditorActive;
+            if (_isEditorActive)
+            {
+                _uiEditorLayer.Visibility = Visibility.Visible;
+                _defaultEditorLayer.Visibility = Visibility.Hidden;
+
+                loadUI();
+            }
+            else
+            {
+                _uiEditorLayer.Visibility = Visibility.Hidden;
+                _defaultEditorLayer.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void loadUI()
+        {
+            EbxAssetEntry ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+
+            EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
+            dynamic rootObject = asset.RootObject;
+
+            float mainSizeX = rootObject.Object.Internal.Size.X;
+            float mainSizeY = rootObject.Object.Internal.Size.Y;
+
+            _uiSize.Width = mainSizeX;
+            _uiSize.Height = mainSizeY;
+
+            _uiCanvas.Children.Clear();
+
+            App.Logger.Log("");
+            App.Logger.Log("---- " + rootObject.Name + " ----");
+
+            foreach (var layer in rootObject.Object.Internal.Layers)
+            {
+                foreach (var uiComponent in layer.Internal.Elements)
+                {
+                    if (layer.Internal.Visible == true)
+                    {
+                        var sizeX = uiComponent.Internal.Size.X;
+                        var sizeY = uiComponent.Internal.Size.Y;
+
+                        var offsetX = uiComponent.Internal.Offset.X;
+                        var offsetY = uiComponent.Internal.Offset.Y;
+
+                        double anchorX = (double)(uiComponent.Internal.Anchor.X);
+                        double anchorY = (double)(uiComponent.Internal.Anchor.Y);
+
+                        double width = (double)(uiComponent.Internal.Size.X);
+                        double height = (double)(uiComponent.Internal.Size.Y);
+                        double x = (double)(uiComponent.Internal.Offset.X);
+                        double y = (double)(uiComponent.Internal.Offset.Y);
+
+
+                        App.Logger.Log("{0} Offset: {1} {2}, Size: {3} {4}, Anchor: {5} {6}",
+                            uiComponent.Internal.InstanceName,
+                            offsetX.ToString(), offsetY.ToString(),
+                            sizeX.ToString(), sizeY.ToString(),
+                            anchorX.ToString(), anchorY.ToString());
+
+
+                        double finalX = (anchorX * mainSizeX) + x;
+                        double finalY = (anchorY * mainSizeY) + y;
+
+                        var rect = new System.Windows.Shapes.Rectangle
+                        {
+                            Width = width,
+                            Height = height,
+                            Fill = System.Windows.Media.Brushes.Orange,
+                            Opacity = 0.2
+                        };
+
+                        var tb = new TextBlock { Text = uiComponent.Internal.InstanceName, FontSize = 24 };
+
+                        Canvas.SetLeft(rect, finalX);
+                        Canvas.SetTop(rect, finalY);
+
+                        Canvas.SetLeft(tb, finalX);
+                        Canvas.SetTop(tb, finalY);
+
+                        foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
+                            {
+                                App.Logger.Log("texture");
+
+                                var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
+                                var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
+
+                                EbxAsset textureMapAsset = App.AssetManager.GetEbx(textureMapEbx);
+                                dynamic rootObjectTextureMap = textureMapAsset.RootObject;
+
+                                foreach (var outputEntry in rootObjectTextureMap.Output)
+                                {
+                                    App.Logger.Log(Convert.ToString(outputEntry.Min));
+                                }
+                            }
+
+                        _uiCanvas.UpdateLayout();
+
+                        // objectId by @gabbaton
+                        CString objectIdCStr = ((dynamic)uiComponent.Internal).__Id;
+                        string objectId = objectIdCStr.ToString();
+
+                        if (objectId == "UIElementWidgetReferenceEntityData")
+                        {
+                            /*
+                            EbxAssetEntry ebxEntryBlueprint = uiComponent.Internal.Blueprint as EbxAssetEntry;
+
+                            EbxAsset assetBlueprint = App.AssetManager.GetEbx(ebxEntryBlueprint);
+                            dynamic rootObjectBlueprint = assetBlueprint.RootObject;
+
+                            App.Logger.Log(objectId);
+                            App.Logger.Log(Convert.ToString(rootObjectBlueprint.Object.Internal.Size.X));
+                            */
+                        }
+
+                        _uiCanvas.Children.Add(rect);
+                        _uiCanvas.Children.Add(tb);
+                    }
+                }
+            }
+        }
+
+        private void refreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            _uiCanvas.UpdateLayout();
+            App.Logger.Log("Refreshed layout.");
+        }
+
+        // unused thing
+        private void addObjectButton_Click(object sender, RoutedEventArgs e)
+        {
+            App.Logger.Log("added object");
+        }
+    }
+}
