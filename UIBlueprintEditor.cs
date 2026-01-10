@@ -109,6 +109,24 @@ namespace UIBlueprintEditor
             App.Logger.Log("");
             App.Logger.Log("---- " + rootObject.Name + " ----");
 
+            Dictionary<string, dynamic> mappingIdToMapping = new Dictionary<string, dynamic>();
+            foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
+            {
+                App.Logger.Log("texture");
+
+                var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
+                var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
+
+                EbxAsset textureMapAsset = App.AssetManager.GetEbx(textureMapEbx);
+                dynamic rootObjectTextureMap = textureMapAsset.RootObject;
+
+                foreach (dynamic outputEntry in rootObjectTextureMap.Output)
+                {
+                    App.Logger.Log(Convert.ToString(outputEntry.Min));
+                    mappingIdToMapping.Add(outputEntry.Id, outputEntry);
+                }
+            }
+
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
                 foreach (var uiComponent in layer.Internal.Elements)
@@ -155,22 +173,6 @@ namespace UIBlueprintEditor
 
                         Canvas.SetLeft(tb, finalX);
                         Canvas.SetTop(tb, finalY);
-
-                        foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
-                            {
-                                App.Logger.Log("texture");
-
-                                var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
-                                var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
-
-                                EbxAsset textureMapAsset = App.AssetManager.GetEbx(textureMapEbx);
-                                dynamic rootObjectTextureMap = textureMapAsset.RootObject;
-
-                                foreach (var outputEntry in rootObjectTextureMap.Output)
-                                {
-                                    App.Logger.Log(Convert.ToString(outputEntry.Min));
-                                }
-                            }
 
                         _uiCanvas.UpdateLayout();
 
