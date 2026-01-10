@@ -1,9 +1,11 @@
-﻿using Frosty.Core;
+using Frosty.Core;
 using Frosty.Core.Controls;
+using Frosty.Core.Screens;
 using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
 using FrostySdk.IO;
 using FrostySdk.Managers;
+using FrostySdk.Resources;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -74,6 +76,7 @@ namespace UIBlueprintEditor
             _refreshButton.Click += refreshButton_Click;
         }
 
+        // switches between the default editor and the ui editor
         private void switchViewButton_Click(object sender, RoutedEventArgs e)
         {
             _isEditorActive = !_isEditorActive;
@@ -91,6 +94,7 @@ namespace UIBlueprintEditor
             }
         }
 
+        // loads every asset/component in the ui blueprint that you're currently on
         private void loadUI()
         {
             EbxAssetEntry ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
@@ -108,6 +112,44 @@ namespace UIBlueprintEditor
 
             App.Logger.Log("");
             App.Logger.Log("---- " + rootObject.Name + " ----");
+
+            Dictionary<dynamic, dynamic> mappingIdToMapping = new Dictionary<dynamic, dynamic>();
+            Dictionary<dynamic, dynamic> mappingMinValue = new Dictionary<dynamic, dynamic>();
+            Dictionary<dynamic, dynamic> mappingMaxValue = new Dictionary<dynamic, dynamic>();
+            Dictionary<dynamic, Texture> mappingTexture = new Dictionary<dynamic, Texture>();
+
+            foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
+            {
+                App.Logger.Log("texture");
+
+                var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
+                var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
+
+                EbxAsset textureMapAsset = App.AssetManager.GetEbx(textureMapEbx);
+                dynamic rootObjectTextureMap = textureMapAsset.RootObject;
+
+                foreach (dynamic outputEntry in rootObjectTextureMap.Output)
+                {
+                    var min = outputEntry.Min;
+                    var max = outputEntry.Max;
+                    var textureRef = outputEntry.Texture;
+
+                    var textureGuid = ((PointerRef)textureRef).External.FileGuid;
+                    var textureEbx = App.AssetManager.GetEbxEntry(textureGuid);
+
+                    var textureAsset = App.AssetManager.GetEbx(textureEbx);
+                    dynamic rootObjectTexture = textureAsset.RootObject;
+                    ulong textureRes = ((dynamic)rootObjectTexture).Resource;
+
+                    Texture texture;
+                    texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
+
+                    mappingIdToMapping.Add(outputEntry.Id, outputEntry);
+                    mappingMinValue.Add(outputEntry.Id, min);
+                    mappingMaxValue.Add(outputEntry.Id, max);
+                    mappingTexture.Add(outputEntry.Id, texture);
+                }
+            }
 
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
@@ -140,64 +182,61 @@ namespace UIBlueprintEditor
                         double finalX = (anchorX * mainSizeX) + x;
                         double finalY = (anchorY * mainSizeY) + y;
 
-                        var rect = new System.Windows.Shapes.Rectangle
-                        {
-                            Width = width,
-                            Height = height,
-                            Fill = System.Windows.Media.Brushes.Orange,
-                            Opacity = 0.2
-                        };
-
-                        var tb = new TextBlock { Text = uiComponent.Internal.InstanceName, FontSize = 24 };
-
-                        Canvas.SetLeft(rect, finalX);
-                        Canvas.SetTop(rect, finalY);
-
-                        Canvas.SetLeft(tb, finalX);
-                        Canvas.SetTop(tb, finalY);
-
-                        foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
-                            {
-                                App.Logger.Log("texture");
-
-                                var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
-                                var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
-
-                                EbxAsset textureMapAsset = App.AssetManager.GetEbx(textureMapEbx);
-                                dynamic rootObjectTextureMap = textureMapAsset.RootObject;
-
-                                foreach (var outputEntry in rootObjectTextureMap.Output)
-                                {
-                                    App.Logger.Log(Convert.ToString(outputEntry.Min));
-                                }
-                            }
-
-                        _uiCanvas.UpdateLayout();
-
                         // objectId by @gabbaton
                         CString objectIdCStr = ((dynamic)uiComponent.Internal).__Id;
                         string objectId = objectIdCStr.ToString();
 
-                        if (objectId == "UIElementWidgetReferenceEntityData")
+                        if (objectId == "UIElementBitmapEntityData" || objectId == "PVZUIElementBitmapEntityData" || objectId == "PVZUIElementDynamicBitmapEntityData")
                         {
-                            /*
-                            EbxAssetEntry ebxEntryBlueprint = uiComponent.Internal.Blueprint as EbxAssetEntry;
+                            var image = new FrostyViewport
+                            {
+                                Width = width,
+                                Height = height
+                            };
 
-                            EbxAsset assetBlueprint = App.AssetManager.GetEbx(ebxEntryBlueprint);
-                            dynamic rootObjectBlueprint = assetBlueprint.RootObject;
+                            string textureMapId = uiComponent.Internal.TextureId;
 
-                            App.Logger.Log(objectId);
-                            App.Logger.Log(Convert.ToString(rootObjectBlueprint.Object.Internal.Size.X));
-                            */
+                            var texture = mappingTexture[textureMapId];
+
+                            image.Screen = new TextureScreen(texture);
+
+                            Canvas.SetLeft(image, finalX);
+                            Canvas.SetTop(image, finalY);
+
+                            _uiCanvas.Children.Add(image);
+
+                            _uiCanvas.UpdateLayout();
                         }
+                        else
+                        {
+                            // create a basic orange rectangle if its an unkown component
+                            var rect = new System.Windows.Shapes.Rectangle
+                            {
+                                Width = width,
+                                Height = height,
+                                Fill = System.Windows.Media.Brushes.Orange,
+                                Opacity = 0.2
+                            };
 
-                        _uiCanvas.Children.Add(rect);
-                        _uiCanvas.Children.Add(tb);
+                            var tb = new TextBlock { Text = uiComponent.Internal.InstanceName, FontSize = 24 };
+
+                            Canvas.SetLeft(rect, finalX);
+                            Canvas.SetTop(rect, finalY);
+
+                            Canvas.SetLeft(tb, finalX);
+                            Canvas.SetTop(tb, finalY);
+
+                            _uiCanvas.Children.Add(rect);
+                            _uiCanvas.Children.Add(tb);
+
+                            _uiCanvas.UpdateLayout();
+                        }
                     }
                 }
             }
         }
 
+        // refreshes the layout in case any ui values change
         private void refreshButton_Click(object sender, RoutedEventArgs e)
         {
             _uiCanvas.UpdateLayout();
