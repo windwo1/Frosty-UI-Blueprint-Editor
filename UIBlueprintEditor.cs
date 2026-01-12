@@ -13,12 +13,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
+using TexturePlugin;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace UIBlueprintEditor
@@ -99,6 +102,8 @@ namespace UIBlueprintEditor
             }
         }
 
+        private static TextureExporter s_exporter = new TextureExporter();
+
         // loads every asset/component in the ui blueprint that you're currently on
         private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
         {
@@ -128,7 +133,7 @@ namespace UIBlueprintEditor
             Dictionary<dynamic, dynamic> mappingIdToMapping = new Dictionary<dynamic, dynamic>();
             Dictionary<dynamic, dynamic> mappingMinValue = new Dictionary<dynamic, dynamic>();
             Dictionary<dynamic, dynamic> mappingMaxValue = new Dictionary<dynamic, dynamic>();
-            Dictionary<dynamic, Texture> mappingTexture = new Dictionary<dynamic, Texture>();
+            Dictionary<dynamic, BitmapImage> mappingTexture = new Dictionary<dynamic, BitmapImage>();
 
             foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
             {
@@ -153,13 +158,26 @@ namespace UIBlueprintEditor
                     dynamic rootObjectTexture = textureAsset.RootObject;
                     ulong textureRes = ((dynamic)rootObjectTexture).Resource;
 
-                    Texture texture;
-                    texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
+                    // texture section by NM (thanks lol)
+
+                    Texture texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
 
                     mappingIdToMapping.Add(outputEntry.Id, outputEntry);
                     mappingMinValue.Add(outputEntry.Id, min);
                     mappingMaxValue.Add(outputEntry.Id, max);
-                    mappingTexture.Add(outputEntry.Id, texture);
+
+                    // Temporary filename.
+                    string path = Path.Combine(Environment.CurrentDirectory,
+                        string.Format("{0}.png", Guid.NewGuid()));
+
+                    // `TextureExporter` can't export to a `Stream`, so we'll need to export to the disk first.
+                    s_exporter.Export(texture, path, "*.png");
+
+                    // Read the newly exported image into a `Bitmap`.
+                    var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    var bitmap = new BitmapImage();
+                    bitmap.StreamSource = stream;
+                    mappingTexture.Add(outputEntry.Id, bitmap);
                 }
             }
 
@@ -202,14 +220,13 @@ namespace UIBlueprintEditor
                         {
                             try
                             {
-                                var image = new FrostyViewport
+                                var image = new System.Windows.Controls.Image
                                 {
                                     Width = width,
                                     Height = height,
                                     ClipToBounds = true,
                                     VerticalAlignment = VerticalAlignment.Top,
                                     HorizontalAlignment = HorizontalAlignment.Left,
-                                    
                                 };
 
                                 var tb = new TextBlock
@@ -234,7 +251,7 @@ namespace UIBlueprintEditor
                                 System.Windows.Point min = new System.Windows.Point(minX, minY);
                                 System.Windows.Point max = new System.Windows.Point(maxX, maxY);
 
-                                image.Screen = new TextureScreen(texture);
+                                image.Source = texture;
                                 image.Clip = new RectangleGeometry(new Rect(min, max));
                                 RenderOptions.SetBitmapScalingMode(image, bitmapScalingMode:BitmapScalingMode.Fant);
 
