@@ -2,6 +2,7 @@ using Frosty.Core;
 using Frosty.Core.Controls;
 using Frosty.Core.Controls.Editors;
 using Frosty.Core.Screens;
+using Frosty.Core.Windows;
 using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
 using FrostySdk.IO;
@@ -18,6 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace UIBlueprintEditor
 {
@@ -66,21 +68,21 @@ namespace UIBlueprintEditor
             _defaultEditorLayer = GetTemplateChild(PART_DefaultEditorLayer) as FrameworkElement;
 
             _switchViewButton = GetTemplateChild(PART_SwitchView) as Button;
-            _switchViewButton.Click += switchViewButton_Click;
+            _switchViewButton.Click += SwitchViewButton_Click;
 
             _addObjectButton = GetTemplateChild(PART_AddObject) as Button;
-            _addObjectButton.Click += addObjectButton_Click;
+            _addObjectButton.Click += AddObjectButton_Click;
 
             _uiSize = GetTemplateChild(PART_UISize) as FrameworkElement;
 
             _uiCanvas = GetTemplateChild(PART_UICanvas) as Canvas;
 
             _refreshButton = GetTemplateChild(PART_Refresh) as Button;
-            _refreshButton.Click += refreshButton_Click;
+            _refreshButton.Click += RefreshButton_Click;
         }
 
         // switches between the default editor and the ui editor
-        private void switchViewButton_Click(object sender, RoutedEventArgs e)
+        private void SwitchViewButton_Click(object sender, RoutedEventArgs e)
         {
             _isEditorActive = !_isEditorActive;
             if (_isEditorActive)
@@ -88,7 +90,7 @@ namespace UIBlueprintEditor
                 _uiEditorLayer.Visibility = Visibility.Visible;
                 _defaultEditorLayer.Visibility = Visibility.Hidden;
 
-                loadUI(App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry, false);
+                LoadUI(App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry, false, null);
             }
             else
             {
@@ -98,7 +100,7 @@ namespace UIBlueprintEditor
         }
 
         // loads every asset/component in the ui blueprint that you're currently on
-        private void loadUI(EbxAssetEntry ebxEntry, bool isWidget)
+        private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
         {
             bool createImages = true;
             bool createWidgets = true;
@@ -109,6 +111,9 @@ namespace UIBlueprintEditor
 
             float mainSizeX = rootObject.Object.Internal.Size.X;
             float mainSizeY = rootObject.Object.Internal.Size.Y;
+
+            _uiCanvas.Width = mainSizeX;
+            _uiCanvas.Height = mainSizeY;
 
             App.Logger.Log("");
             App.Logger.Log("---- " + rootObject.Name + " ----");
@@ -186,14 +191,14 @@ namespace UIBlueprintEditor
                             anchorX.ToString(), anchorY.ToString());
 
 
-                        double finalX = (anchorX * mainSizeX) + x;
-                        double finalY = (anchorY * mainSizeY) + y;
+                        double finalX = anchorX * (mainSizeX - sizeX) + x;
+                        double finalY = anchorY * (mainSizeY - sizeY) + y;
 
                         // objectId by @gabbaton
                         CString objectIdCStr = ((dynamic)uiComponent.Internal).__Id;
                         string objectId = objectIdCStr.ToString();
 
-                        if ((objectId == "UIElementBitmapEntityData" || objectId == "PVZUIElementBitmapEntityData" || objectId == "PVZUIElementDynamicBitmapEntityData") && createImages == true)
+                        if ((objectId == "UIElementBitmapEntityData" || objectId == "PVZUIElementBitmapEntityData" || objectId == "PVZUIElementDynamicBitmapEntityData" || objectId == "PVZUIElementDynamicBitmapEntityData") && createImages == true)
                         {
                             try
                             {
@@ -203,7 +208,8 @@ namespace UIBlueprintEditor
                                     Height = height,
                                     ClipToBounds = true,
                                     VerticalAlignment = VerticalAlignment.Top,
-                                    HorizontalAlignment = HorizontalAlignment.Left
+                                    HorizontalAlignment = HorizontalAlignment.Left,
+                                    
                                 };
 
                                 var tb = new TextBlock
@@ -228,8 +234,22 @@ namespace UIBlueprintEditor
                                 System.Windows.Point min = new System.Windows.Point(minX, minY);
                                 System.Windows.Point max = new System.Windows.Point(maxX, maxY);
 
-                                image.Clip = new RectangleGeometry(new Rect(min, max));
                                 image.Screen = new TextureScreen(texture);
+                                image.Clip = new RectangleGeometry(new Rect(min, max));
+                                RenderOptions.SetBitmapScalingMode(image, bitmapScalingMode:BitmapScalingMode.Fant);
+
+                                // scale up to previous size
+                                double croppedWidth = maxX - minX;
+                                double croppedHeight = maxY - minY;
+
+                                double scaleX = width / croppedWidth;
+                                double scaleY = height / croppedHeight;
+
+                                var transformGroup = new TransformGroup();
+                                transformGroup.Children.Add(new TranslateTransform(-minX, -minY));
+                                transformGroup.Children.Add(new ScaleTransform(scaleX, scaleY));
+
+                                image.RenderTransform = transformGroup;
 
                                 Canvas.SetLeft(image, finalX);
                                 Canvas.SetTop(image, finalY);
@@ -239,17 +259,25 @@ namespace UIBlueprintEditor
 
                                 if (uiComponent.Internal.Visible == true)
                                 {
-                                    _uiCanvas.Children.Add(image);
-                                    // _uiCanvas.Children.Add(tb);
+                                    if (isWidget)
+                                    {
+                                        widgetCanvas.Children.Add(image);
+                                        //widgetCanvas.Children.Add(tb);
+                                    }
+                                    else
+                                    {
+                                        _uiCanvas.Children.Add(image);
+                                        //_uiCanvas.Children.Add(tb);
 
-                                    // comment out if you dont need text on the image
+                                        // comment out if you dont need text on the image
+                                    }
 
                                     _uiCanvas.UpdateLayout();
                                 }
                             }
                             catch (Exception ex)
                             {
-                                App.Logger.Log("Something went wrong");
+                                App.Logger.Log("Something went wrong: " + ex);
                                 // "An item with the same key" error sometimes happens, idk the exception name so i just did this
                             }
                         }
@@ -276,7 +304,7 @@ namespace UIBlueprintEditor
                             double fontSize = (double)rootObjectFont.Hd.Internal.PointSize;
 
                             tb.Text = uiComponent.Internal.Text.Sid;
-                            tb.FontSize = FontSize;
+                            tb.FontSize = fontSize;
                             tb.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(colorR, colorG, colorB));
 
                             switch (uiComponent.Internal.Text.VerticalAlignment.ToString())
@@ -317,7 +345,14 @@ namespace UIBlueprintEditor
 
                             if (uiComponent.Internal.Visible == true)
                             {
-                                _uiCanvas.Children.Add(tb);
+                                if (isWidget)
+                                {
+                                    widgetCanvas.Children.Add(tb);
+                                }
+                                else
+                                {
+                                    _uiCanvas.Children.Add(tb);
+                                }
 
                                 _uiCanvas.UpdateLayout();
                             }
@@ -350,20 +385,65 @@ namespace UIBlueprintEditor
 
                             if (uiComponent.Internal.Visible == true)
                             {
-                                _uiCanvas.Children.Add(rect);
+                                if (isWidget)
+                                {
+                                    widgetCanvas.Children.Add(rect);
+                                }
+                                else
+                                {
+                                    _uiCanvas.Children.Add(rect);
+                                }
 
                                 _uiCanvas.UpdateLayout();
                             }
                         }
+                        else if (objectId == "UIElementButtonEntityData")
+                        {
+                            // does nothing for buttons since they are basically just hitboxes
+                        }
                         else if ((objectId == "UIElementWidgetReferenceEntityData") && createWidgets == true)
                         {
+                            var viewBox = new Viewbox
+                            {
+                                Width = width,
+                                Height = height,
+                                VerticalAlignment = VerticalAlignment.Top,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                            };
+
+                            var canvas = new Canvas
+                            {
+                                Width = width,
+                                Height = height,
+                                VerticalAlignment = VerticalAlignment.Top,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                            };
+
                             var widgetGuid = ((PointerRef)uiComponent.Internal.Blueprint).External.FileGuid;
                             var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
 
                             App.Logger.Log("widget");
 
-                            isWidget = true;
-                            loadUI(widgetEbx, true);
+                            Canvas.SetLeft(viewBox, finalX);
+                            Canvas.SetTop(viewBox, finalY);
+
+                            Canvas.SetLeft(canvas, finalX);
+                            Canvas.SetTop(canvas, finalY);
+
+                            if (isWidget)
+                            {
+                                widgetCanvas.Children.Add(viewBox);
+                                viewBox.Child = canvas;
+                            }
+                            else
+                            {
+                                _uiCanvas.Children.Add(viewBox);
+                                viewBox.Child = canvas;
+                            }
+
+                            _uiCanvas.UpdateLayout();
+
+                            LoadUI(widgetEbx, true, canvas);
                         }
                         else
                         {
@@ -381,9 +461,9 @@ namespace UIBlueprintEditor
                                 HorizontalAlignment = HorizontalAlignment.Left
                             };
 
-                            var tb = new TextBlock 
-                            { 
-                                Text = uiComponent.Internal.InstanceName, 
+                            var tb = new TextBlock
+                            {
+                                Text = uiComponent.Internal.InstanceName,
                                 FontSize = 24,
                                 VerticalAlignment = VerticalAlignment.Center,
                                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -396,8 +476,16 @@ namespace UIBlueprintEditor
                             Canvas.SetLeft(tb, finalX);
                             Canvas.SetTop(tb, finalY);
 
-                            _uiCanvas.Children.Add(rect);
-                            _uiCanvas.Children.Add(tb);
+                            if (isWidget)
+                            {
+                                widgetCanvas.Children.Add(rect);
+                                widgetCanvas.Children.Add(tb);
+                            }
+                            else
+                            {
+                                _uiCanvas.Children.Add(rect);
+                                _uiCanvas.Children.Add(tb);
+                            }
 
                             _uiCanvas.UpdateLayout();
                         }
@@ -407,14 +495,14 @@ namespace UIBlueprintEditor
         }
 
         // refreshes the layout in case any ui values change
-        private void refreshButton_Click(object sender, RoutedEventArgs e)
+        private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             _uiCanvas.UpdateLayout();
             App.Logger.Log("Refreshed layout.");
         }
 
         // unused thing
-        private void addObjectButton_Click(object sender, RoutedEventArgs e)
+        private void AddObjectButton_Click(object sender, RoutedEventArgs e)
         {
             App.Logger.Log("added object");
         }
