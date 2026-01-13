@@ -18,6 +18,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -104,13 +105,19 @@ namespace UIBlueprintEditor
 
         private static TextureExporter s_exporter = new TextureExporter();
 
+        bool createImages = false;
+        bool createWidgets = false;
+        bool createText = false;
+
+        bool debugging = true;
+
+        bool dragging = false;
+        float movedX;
+        float movedY;
+
         // loads every asset/component in the ui blueprint that you're currently on
         private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
         {
-            bool createImages = true;
-            bool createWidgets = true;
-            bool createText = true;
-
             EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
             dynamic rootObject = asset.RootObject;
 
@@ -120,8 +127,11 @@ namespace UIBlueprintEditor
             _uiCanvas.Width = mainSizeX;
             _uiCanvas.Height = mainSizeY;
 
-            App.Logger.Log("");
-            App.Logger.Log("---- " + rootObject.Name + " ----");
+            if (debugging)
+            {
+                App.Logger.Log("");
+                App.Logger.Log("---- " + rootObject.Name + " ----");
+            }
 
             if (isWidget == false)
             {
@@ -137,7 +147,10 @@ namespace UIBlueprintEditor
 
             foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
             {
-                App.Logger.Log("texture");
+                if (debugging)
+                {
+                    App.Logger.Log("texture");
+                }
 
                 var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
                 var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
@@ -168,15 +181,22 @@ namespace UIBlueprintEditor
 
                     // Temporary filename.
                     string path = Path.Combine(Environment.CurrentDirectory,
-                        string.Format("{0}.png", Guid.NewGuid()));
+                        string.Format("{0:X16}.png", texture.ResourceId));
 
-                    // `TextureExporter` can't export to a `Stream`, so we'll need to export to the disk first.
-                    s_exporter.Export(texture, path, "*.png");
+                    if (!File.Exists(path))
+                    {
+                        // `TextureExporter` can't export to a `Stream`, so we'll need to export to the disk first.
+                        s_exporter.Export(texture, path, "*.png");
+                    }
 
                     // Read the newly exported image into a `Bitmap`.
                     var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                     var bitmap = new BitmapImage();
+
+                    bitmap.BeginInit();
                     bitmap.StreamSource = stream;
+                    bitmap.EndInit();
+
                     mappingTexture.Add(outputEntry.Id, bitmap);
                 }
             }
@@ -202,12 +222,14 @@ namespace UIBlueprintEditor
                         double y = (double)(uiComponent.Internal.Offset.Y);
 
 
-                        App.Logger.Log("{0} Offset: {1} {2}, Size: {3} {4}, Anchor: {5} {6}",
+                        if (debugging)
+                        {
+                            App.Logger.Log("{0} Offset: {1} {2}, Size: {3} {4}, Anchor: {5} {6}",
                             uiComponent.Internal.InstanceName,
                             offsetX.ToString(), offsetY.ToString(),
                             sizeX.ToString(), sizeY.ToString(),
                             anchorX.ToString(), anchorY.ToString());
-
+                        }
 
                         double finalX = anchorX * (mainSizeX - sizeX) + x;
                         double finalY = anchorY * (mainSizeY - sizeY) + y;
@@ -220,6 +242,16 @@ namespace UIBlueprintEditor
                         {
                             try
                             {
+                                // canvas is used to group each ui component
+                                var canvas = new Canvas
+                                {
+                                    Width = width,
+                                    Height = height,
+                                    ClipToBounds = true,
+                                    VerticalAlignment = VerticalAlignment.Top,
+                                    HorizontalAlignment = HorizontalAlignment.Left,
+                                };
+
                                 var image = new System.Windows.Controls.Image
                                 {
                                     Width = width,
@@ -268,6 +300,9 @@ namespace UIBlueprintEditor
 
                                 image.RenderTransform = transformGroup;
 
+                                Canvas.SetLeft(canvas, finalX);
+                                Canvas.SetTop(canvas, finalY);
+
                                 Canvas.SetLeft(image, finalX);
                                 Canvas.SetTop(image, finalY);
 
@@ -278,13 +313,15 @@ namespace UIBlueprintEditor
                                 {
                                     if (isWidget)
                                     {
-                                        widgetCanvas.Children.Add(image);
-                                        //widgetCanvas.Children.Add(tb);
+                                        widgetCanvas.Children.Add(canvas);
+                                        canvas.Children.Add(image);
+                                        //canvas.Children.Add(tb);
                                     }
                                     else
                                     {
-                                        _uiCanvas.Children.Add(image);
-                                        //_uiCanvas.Children.Add(tb);
+                                        _uiCanvas.Children.Add(canvas);
+                                        canvas.Children.Add(image);
+                                        //canvas.Children.Add(tb);
 
                                         // comment out if you dont need text on the image
                                     }
@@ -300,6 +337,15 @@ namespace UIBlueprintEditor
                         }
                         else if ((objectId == "UIElementTextFieldEntityData" || objectId == "PVZUIElementTextFieldEntityData") && createText == true)
                         {
+                            var canvas = new Canvas
+                            {
+                                Width = width,
+                                Height = height,
+                                ClipToBounds = true,
+                                VerticalAlignment = VerticalAlignment.Top,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                            };
+
                             var tb = new TextBlock
                             {
                                 Width = width,
@@ -356,7 +402,10 @@ namespace UIBlueprintEditor
                                     tb.HorizontalAlignment = HorizontalAlignment.Center;
                                     break;
                             }
-                            
+
+                            Canvas.SetLeft(canvas, finalX);
+                            Canvas.SetTop(canvas, finalY);
+
                             Canvas.SetLeft(tb, finalX);
                             Canvas.SetTop(tb, finalY);
 
@@ -364,11 +413,13 @@ namespace UIBlueprintEditor
                             {
                                 if (isWidget)
                                 {
-                                    widgetCanvas.Children.Add(tb);
+                                    widgetCanvas.Children.Add(canvas);
+                                    canvas.Children.Add(tb);
                                 }
                                 else
                                 {
-                                    _uiCanvas.Children.Add(tb);
+                                    _uiCanvas.Children.Add(canvas);
+                                    canvas.Children.Add(tb);
                                 }
 
                                 _uiCanvas.UpdateLayout();
@@ -376,6 +427,15 @@ namespace UIBlueprintEditor
                         }
                         else if (objectId == "UIElementFillEntityData" || objectId == "PVZUIElementFillEntityData")
                         {
+                            var canvas = new Canvas
+                            {
+                                Width = width,
+                                Height = height,
+                                ClipToBounds = true,
+                                VerticalAlignment = VerticalAlignment.Top,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                            };
+
                             var rect = new System.Windows.Shapes.Rectangle
                             {
                                 Width = width,
@@ -397,6 +457,9 @@ namespace UIBlueprintEditor
 
                             rect.Fill = new SolidColorBrush(System.Windows.Media.Color.FromRgb(colorR, colorG, colorB));
 
+                            Canvas.SetLeft(canvas, finalX);
+                            Canvas.SetTop(canvas, finalY);
+
                             Canvas.SetLeft(rect, finalX);
                             Canvas.SetTop(rect, finalY);
 
@@ -404,11 +467,13 @@ namespace UIBlueprintEditor
                             {
                                 if (isWidget)
                                 {
-                                    widgetCanvas.Children.Add(rect);
+                                    widgetCanvas.Children.Add(canvas);
+                                    canvas.Children.Add(rect);
                                 }
                                 else
                                 {
-                                    _uiCanvas.Children.Add(rect);
+                                    _uiCanvas.Children.Add(canvas);
+                                    canvas.Children.Add(rect);
                                 }
 
                                 _uiCanvas.UpdateLayout();
@@ -439,7 +504,10 @@ namespace UIBlueprintEditor
                             var widgetGuid = ((PointerRef)uiComponent.Internal.Blueprint).External.FileGuid;
                             var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
 
-                            App.Logger.Log("widget");
+                            if (debugging)
+                            {
+                                App.Logger.Log("widget");
+                            }
 
                             Canvas.SetLeft(viewBox, finalX);
                             Canvas.SetTop(viewBox, finalY);
@@ -467,6 +535,15 @@ namespace UIBlueprintEditor
                             // create a basic rectangle if its an unkown component
 
                             App.Logger.Log("Unrecongnized UI component");
+                            var canvas = new Canvas
+                            {
+                                Width = width,
+                                Height = height,
+                                ClipToBounds = true,
+                                VerticalAlignment = VerticalAlignment.Top,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                            };
+
                             var rect = new System.Windows.Shapes.Rectangle
                             {
                                 Width = width,
@@ -487,6 +564,9 @@ namespace UIBlueprintEditor
                                 Opacity = 0.2
                             };
 
+                            Canvas.SetLeft(canvas, finalX);
+                            Canvas.SetTop(canvas, finalY);
+
                             Canvas.SetLeft(rect, finalX);
                             Canvas.SetTop(rect, finalY);
 
@@ -495,13 +575,27 @@ namespace UIBlueprintEditor
 
                             if (isWidget)
                             {
-                                widgetCanvas.Children.Add(rect);
-                                widgetCanvas.Children.Add(tb);
+                                widgetCanvas.Children.Add(canvas);
+                                canvas.Children.Add(rect);
+                                canvas.Children.Add(tb);
                             }
                             else
                             {
-                                _uiCanvas.Children.Add(rect);
-                                _uiCanvas.Children.Add(tb);
+                                _uiCanvas.Children.Add(canvas);
+                                canvas.Children.Add(rect);
+                                canvas.Children.Add(tb);
+                                
+                                ControlUI(canvas);
+
+                                if (dragging)
+                                {
+                                    dynamic component = uiComponent.Internal.Resolve();
+
+                                    component.Offset.X = movedX;
+                                    component.Offset.Y = movedY;
+
+                                    App.AssetManager.ModifyEbx(rootObject.Name, asset);
+                                }
                             }
 
                             _uiCanvas.UpdateLayout();
@@ -511,11 +605,54 @@ namespace UIBlueprintEditor
             }
         }
 
+        System.Windows.Point startPosition;
+        private void ControlUI(Canvas canvas)
+        {
+            canvas.MouseDown += CanvasMouseDown;
+            canvas.MouseMove += CanvasMouseMove;
+            canvas.MouseUp += CanvasMouseUp;
+        }
+
+        private void CanvasMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            Canvas canvas = sender as Canvas;
+
+            dragging = true;
+            startPosition = Mouse.GetPosition(_uiCanvas);
+        }
+
+        private void CanvasMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            dragging = false;
+        }
+
+        private void CanvasMouseMove(object sender, MouseEventArgs e)
+        {
+            if (dragging)
+            {
+                Canvas canvas = sender as Canvas;
+
+                System.Windows.Point newPosition = Mouse.GetPosition(_uiCanvas);
+
+                double left = Canvas.GetLeft(canvas);
+                double top = Canvas.GetTop(canvas);
+
+                Canvas.SetLeft(canvas, Math.Round(left + (newPosition.X - startPosition.X)));
+                Canvas.SetTop(canvas, Math.Round(top + (newPosition.Y - startPosition.Y)));
+                startPosition = newPosition;
+
+                movedX = (float)Math.Round(left + (newPosition.X - startPosition.X));
+                movedY = (float)Math.Round(left + (newPosition.Y - startPosition.Y));
+
+                App.Logger.Log(Canvas.GetLeft(canvas).ToString());
+                App.Logger.Log(Canvas.GetTop(canvas).ToString());
+            }
+        }
+
         // refreshes the layout in case any ui values change
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             _uiCanvas.UpdateLayout();
-            App.Logger.Log("Refreshed layout.");
         }
 
         // unused thing
