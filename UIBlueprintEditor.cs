@@ -22,6 +22,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using TexturePlugin;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -38,6 +39,7 @@ namespace UIBlueprintEditor
     [TemplatePart(Name = PART_PreciseImage, Type = typeof(Button))]
     [TemplatePart(Name = PART_UIComponentInfo, Type = typeof(TextBlock))]
     [TemplatePart(Name = PART_Unhide, Type = typeof(Button))]
+    [TemplatePart(Name = PART_UISizeText, Type = typeof(TextBlock))]
     public class UIEditor : FrostyAssetEditor
     {
         private const string PART_SwitchView = "PART_SwitchView";
@@ -52,6 +54,7 @@ namespace UIBlueprintEditor
         private const string PART_PreciseImage = "PART_PreciseImage";
         private const string PART_UIComponentInfo = "PART_UIComponentInfo";
         private const string PART_Unhide = "PART_Unhide";
+        private const string PART_UISizeText = "PART_UISizeText";
 
         private Button _switchViewButton;
         private FrameworkElement _uiEditorLayer;
@@ -64,8 +67,9 @@ namespace UIBlueprintEditor
         private System.Windows.Controls.Image _preciseImage;
         private TextBlock _uiComponentInfo;
         private Button _unhideButton;
+        private TextBlock _uiSizeText;
 
-        private bool _isEditorActive = false;
+        private bool isEditorActive = false;
 
         public UIEditor(ILogger inLogger) : base(inLogger)
         {
@@ -105,23 +109,34 @@ namespace UIBlueprintEditor
 
             _unhideButton = GetTemplateChild(PART_Unhide) as Button;
             _unhideButton.Click += UnhideButton_Click;
+
+            _uiSizeText = GetTemplateChild(PART_UISizeText) as TextBlock;
         }
 
         // switches between the default editor and the ui editor
         private void SwitchViewButton_Click(object sender, RoutedEventArgs e)
         {
-            _isEditorActive = !_isEditorActive;
-            if (_isEditorActive)
+            isEditorActive = !isEditorActive;
+            if (isEditorActive)
             {
                 _uiEditorLayer.Visibility = Visibility.Visible;
                 _defaultEditorLayer.Visibility = Visibility.Hidden;
 
-                LoadUI(App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry, false, null);
+                EbxAssetEntry openedAsset = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+
+                if (openedAsset == null)
+                    return;
+
+                FrostyTaskWindow.Show("Loading UI...", "", (task) =>
+                {
+                    LoadUI(openedAsset, false, null);
+                });
             }
             else
             {
                 _uiEditorLayer.Visibility = Visibility.Hidden;
                 _defaultEditorLayer.Visibility = Visibility.Visible;
+                // switches back to default view
             }
         }
 
@@ -131,13 +146,12 @@ namespace UIBlueprintEditor
         readonly bool createWidgets = true;
         readonly bool createText = true;
 
-        int roundTo = 1;
-
         readonly bool debugging = false;
 
+        // this is used for the precise movement / snapping
+        int roundTo = 1;
+
         bool dragging = false;
-        float movedX;
-        float movedY;
 
         // loads every asset/component in the ui blueprint that you're currently on
         private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
@@ -159,10 +173,15 @@ namespace UIBlueprintEditor
 
             if (isWidget == false)
             {
+                // if its not a widget we set the screen size
                 _uiCanvas.Children.Clear();
                 _uiSize.Width = mainSizeX;
                 _uiSize.Height = mainSizeY;
+
+                _uiSizeText.Text = string.Format("Size: {0}, {1}", mainSizeX, mainSizeY);
             }
+
+            // these dictionaries are used later to reference certain values using the TextureId as the key
 
             Dictionary<dynamic, dynamic> mappingIdToMapping = new Dictionary<dynamic, dynamic>();
             Dictionary<dynamic, dynamic> mappingMinValue = new Dictionary<dynamic, dynamic>();
@@ -176,6 +195,7 @@ namespace UIBlueprintEditor
                     App.Logger.Log("texture");
                 }
 
+                // get the texture map asset from the PointerRef
                 var textureMapGuid = ((PointerRef)textureItem).External.FileGuid;
                 var textureMapEbx = App.AssetManager.GetEbxEntry(textureMapGuid);
 
@@ -184,51 +204,57 @@ namespace UIBlueprintEditor
 
                 foreach (dynamic outputEntry in rootObjectTextureMap.Output)
                 {
-                    var min = outputEntry.Min;
-                    var max = outputEntry.Max;
-                    var textureRef = outputEntry.Texture;
-
-                    var textureGuid = ((PointerRef)textureRef).External.FileGuid;
-                    var textureEbx = App.AssetManager.GetEbxEntry(textureGuid);
-
-                    var textureAsset = App.AssetManager.GetEbx(textureEbx);
-                    dynamic rootObjectTexture = textureAsset.RootObject;
-                    ulong textureRes = ((dynamic)rootObjectTexture).Resource;
-
-                    // texture section by NM (thanks lol)
-
-                    Texture texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
-
-                    mappingIdToMapping.Add(outputEntry.Id, outputEntry);
-                    mappingMinValue.Add(outputEntry.Id, min);
-                    mappingMaxValue.Add(outputEntry.Id, max);
-
-                    // Temporary filename.
-                    string path = Path.Combine(Environment.CurrentDirectory,
-                        string.Format("{0:X16}.png", texture.ResourceId));
-
-                    if (!File.Exists(path))
+                    if (!mappingIdToMapping.ContainsKey(outputEntry.Id))
                     {
-                        // `TextureExporter` can't export to a `Stream`, so we'll need to export to the disk first.
-                        s_exporter.Export(texture, path, "*.png");
+                        var min = outputEntry.Min;
+                        var max = outputEntry.Max;
+                        var textureRef = outputEntry.Texture;
+
+                        var textureGuid = ((PointerRef)textureRef).External.FileGuid;
+                        var textureEbx = App.AssetManager.GetEbxEntry(textureGuid);
+
+                        var textureAsset = App.AssetManager.GetEbx(textureEbx);
+                        dynamic rootObjectTexture = textureAsset.RootObject;
+                        ulong textureRes = ((dynamic)rootObjectTexture).Resource;
+
+                        // texture section by NM (thanks lol)
+
+                        Texture texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
+
+                        mappingIdToMapping.Add(outputEntry.Id, outputEntry);
+                        mappingMinValue.Add(outputEntry.Id, min);
+                        mappingMaxValue.Add(outputEntry.Id, max);
+
+                        // Temporary filename.
+                        string path = Path.Combine(Environment.CurrentDirectory,
+                            string.Format("{0:X16}.png", texture.ResourceId));
+
+                        if (!File.Exists(path))
+                        {
+                            // `TextureExporter` can't export to a `Stream`, so we'll need to export to the disk first.
+                            s_exporter.Export(texture, path, "*.png");
+                        }
+
+                        // Read the newly exported image into a `Bitmap`.
+                        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        var bitmap = new BitmapImage();
+
+                        bitmap.BeginInit();
+                        bitmap.StreamSource = stream;
+                        bitmap.EndInit();
+
+                        mappingTexture.Add(outputEntry.Id, bitmap);
                     }
-
-                    // Read the newly exported image into a `Bitmap`.
-                    var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    var bitmap = new BitmapImage();
-
-                    bitmap.BeginInit();
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-
-                    mappingTexture.Add(outputEntry.Id, bitmap);
                 }
             }
 
+            // loops through the "Layers"
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
+                // loops through each component in each layer
                 foreach (var uiComponent in layer.Internal.Elements)
                 {
+                    // the ui will only render if the Visible property of the layer is true
                     if (layer.Internal.Visible == true)
                     {
                         var sizeX = uiComponent.Internal.Size.X;
@@ -266,12 +292,11 @@ namespace UIBlueprintEditor
                         {
                             try
                             {
-                                // canvas is used to group each ui component
+                                // canvas is used to group each ui component, will be useful for the draggable ui
                                 var canvas = new Canvas
                                 {
                                     Width = width,
                                     Height = height,
-                                    ClipToBounds = true,
                                     Tag = Convert.ToString(uiComponent.Internal.__InstanceGuid)
                                 };
 
@@ -279,7 +304,6 @@ namespace UIBlueprintEditor
                                 {
                                     Width = width,
                                     Height = height,
-                                    ClipToBounds = true,
                                 };
 
                                 var tb = new TextBlock
@@ -319,35 +343,36 @@ namespace UIBlueprintEditor
 
                                 image.RenderTransform = transformGroup;
 
-                                Canvas.SetLeft(canvas, finalX);
-                                Canvas.SetTop(canvas, finalY);
-
                                 if (uiComponent.Internal.Visible == true)
                                 {
                                     if (isWidget)
                                     {
+                                        Canvas.SetLeft(canvas, finalX - (width / 2));
+                                        Canvas.SetTop(canvas, finalY - (height / 2));
+
                                         widgetCanvas.Children.Add(canvas);
                                         canvas.Children.Add(image);
                                         //canvas.Children.Add(tb);
                                     }
                                     else
                                     {
+                                        Canvas.SetLeft(canvas, finalX);
+                                        Canvas.SetTop(canvas, finalY);
+
                                         _uiCanvas.Children.Add(canvas);
                                         canvas.Children.Add(image);
                                         //canvas.Children.Add(tb);
 
-                                        // comment out if you dont need text on the image
+                                        // comment out if you don't need text on the image
 
                                         ControlUI(canvas);
                                     }
-
-                                    _uiCanvas.UpdateLayout();
                                 }
                             }
                             catch (Exception ex)
                             {
-                                App.Logger.Log("Something went wrong: " + ex);
-                                // "An item with the same key" error sometimes happens, idk the exception name so i just did this
+                                App.Logger.Log("Something went wrong. InstanceName: " + uiComponent.Internal.InstanceName + " Exception: " + ex);
+                                // "An item with the same key" error sometimes happens
                             }
                         }
                         else if ((objectId == "UIElementTextFieldEntityData" || objectId == "PVZUIElementTextFieldEntityData") && createText == true)
@@ -356,7 +381,6 @@ namespace UIBlueprintEditor
                             {
                                 Width = width,
                                 Height = height,
-                                ClipToBounds = true,
                                 Tag = Convert.ToString(uiComponent.Internal.__InstanceGuid)
                             };
 
@@ -366,6 +390,8 @@ namespace UIBlueprintEditor
                                 Height = height,
                             };
 
+                            // gets the colour from the xyz value directly from the component
+                            // most text fields use a FontEffect for outlines and colours but this is just easier to read
                             var colorR = (byte)Math.Round(uiComponent.Internal.Color.x * 255);
                             var colorG = (byte)Math.Round(uiComponent.Internal.Color.y * 255);
                             var colorB = (byte)Math.Round(uiComponent.Internal.Color.z * 255);
@@ -379,7 +405,16 @@ namespace UIBlueprintEditor
 
                             double fontSize = (double)rootObjectFont.Hd.Internal.PointSize;
 
-                            tb.Text = uiComponent.Internal.Text.Sid;
+                            // if there's no text (instead it's set with a property connection or something) it will use InstanceName
+                            if (uiComponent.Internal.Text.Sid != "")
+                            {
+                                tb.Text = uiComponent.Internal.Text.Sid;
+                            }
+                            else
+                            {
+                                tb.Text = uiComponent.Internal.InstanceName;
+                            }
+
                             tb.FontSize = fontSize;
                             tb.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(colorR, colorG, colorB));
 
@@ -416,25 +451,27 @@ namespace UIBlueprintEditor
                                     break;
                             }
 
-                            Canvas.SetLeft(canvas, finalX);
-                            Canvas.SetTop(canvas, finalY);
-
+                            // if the Visible value is true it will render the ui
                             if (uiComponent.Internal.Visible == true)
                             {
                                 if (isWidget)
                                 {
+                                    Canvas.SetLeft(canvas, finalX - (width / 2));
+                                    Canvas.SetTop(canvas, finalY - (height / 2));
+
                                     widgetCanvas.Children.Add(canvas);
                                     canvas.Children.Add(tb);
                                 }
                                 else
                                 {
+                                    Canvas.SetLeft(canvas, finalX);
+                                    Canvas.SetTop(canvas, finalY);
+
                                     _uiCanvas.Children.Add(canvas);
                                     canvas.Children.Add(tb);
 
                                     ControlUI(canvas);
                                 }
-
-                                _uiCanvas.UpdateLayout();
                             }
                         }
                         else if (objectId == "UIElementFillEntityData" || objectId == "PVZUIElementFillEntityData")
@@ -465,25 +502,26 @@ namespace UIBlueprintEditor
 
                             rect.Fill = new SolidColorBrush(System.Windows.Media.Color.FromRgb(colorR, colorG, colorB));
 
-                            Canvas.SetLeft(canvas, finalX);
-                            Canvas.SetTop(canvas, finalY);
-
                             if (uiComponent.Internal.Visible == true)
                             {
                                 if (isWidget)
                                 {
+                                    Canvas.SetLeft(canvas, finalX - (width / 2));
+                                    Canvas.SetTop(canvas, finalY - (height / 2));
+
                                     widgetCanvas.Children.Add(canvas);
                                     canvas.Children.Add(rect);
                                 }
                                 else
                                 {
+                                    Canvas.SetLeft(canvas, finalX);
+                                    Canvas.SetTop(canvas, finalY);
+
                                     _uiCanvas.Children.Add(canvas);
                                     canvas.Children.Add(rect);
 
                                     ControlUI(canvas);
                                 }
-
-                                _uiCanvas.UpdateLayout();
                             }
                         }
                         else if (objectId == "UIElementButtonEntityData")
@@ -508,7 +546,7 @@ namespace UIBlueprintEditor
                             var canvasWidget = new Canvas
                             {
                                 Width = width,
-                                Height = height
+                                Height = height,
                             };
 
                             var widgetGuid = ((PointerRef)uiComponent.Internal.Blueprint).External.FileGuid;
@@ -519,17 +557,21 @@ namespace UIBlueprintEditor
                                 App.Logger.Log("widget");
                             }
 
-                            Canvas.SetLeft(canvas, finalX);
-                            Canvas.SetTop(canvas, finalY);
 
                             if (isWidget)
                             {
+                                Canvas.SetLeft(canvas, finalX - (width / 2));
+                                Canvas.SetTop(canvas, finalY - (height / 2));
+
                                 widgetCanvas.Children.Add(canvas);
                                 canvas.Children.Add(viewBox);
                                 viewBox.Child = canvasWidget;
                             }
                             else
                             {
+                                Canvas.SetLeft(canvas, finalX);
+                                Canvas.SetTop(canvas, finalY);
+
                                 _uiCanvas.Children.Add(canvas);
                                 canvas.Children.Add(viewBox);
                                 viewBox.Child = canvasWidget;
@@ -537,15 +579,17 @@ namespace UIBlueprintEditor
                                 ControlUI(canvas);
                             }
 
-                            _uiCanvas.UpdateLayout();
-
+                            // repeats everything with the EBX of the widget to render everything that is inside the widget
                             LoadUI(widgetEbx, true, canvasWidget);
                         }
                         else
                         {
-                            // create a basic rectangle if its an unkown component
+                            // creates a basic rectangle if its an unknown component
 
-                            App.Logger.Log("Unrecongnized UI component");
+                            // currently if you rename the Id of your components it wont get recognized
+                            // an easy way to fix that is export the bin file and re-import which will reset the Id of each component
+
+                            App.Logger.Log("Unrecognized UI component");
 
                             var canvas = new Canvas
                             {
@@ -566,39 +610,43 @@ namespace UIBlueprintEditor
                             {
                                 Text = uiComponent.Internal.InstanceName,
                                 FontSize = 24,
-                                Opacity = 0.2
+                                Opacity = 0.2,
                             };
-
-                            Canvas.SetLeft(canvas, finalX);
-                            Canvas.SetTop(canvas, finalY);
 
                             if (isWidget)
                             {
+                                Canvas.SetLeft(canvas, finalX - (width / 2));
+                                Canvas.SetTop(canvas, finalY - (height / 2));
+
                                 widgetCanvas.Children.Add(canvas);
                                 canvas.Children.Add(rect);
                                 canvas.Children.Add(tb);
                             }
                             else
                             {
+                                Canvas.SetLeft(canvas, finalX);
+                                Canvas.SetTop(canvas, finalY);
+
                                 _uiCanvas.Children.Add(canvas);
                                 canvas.Children.Add(rect);
                                 canvas.Children.Add(tb);
 
                                 ControlUI(canvas);
                             }
-
-                            _uiCanvas.UpdateLayout();
                         }
                     }
                 }
+
+                // update layout once everything is loaded
+                _uiCanvas.UpdateLayout();
             }
         }
 
         System.Windows.Point startPosition;
         private void ControlUI(Canvas canvas)
         {
-            canvas.MouseLeftButtonDown += CanvasMouseDown;
             canvas.MouseMove += CanvasMouseMove;
+            canvas.MouseLeftButtonDown += CanvasMouseDown;
             canvas.MouseLeftButtonUp += CanvasMouseUp;
 
             canvas.MouseRightButtonDown += CanvasHideUI;
@@ -618,14 +666,17 @@ namespace UIBlueprintEditor
 
             Canvas canvas = sender as Canvas;
 
+            // reset ZIndex after moving it
+            Canvas.SetZIndex(canvas, 0);
+
             double roundedX = Math.Round((Canvas.GetLeft(canvas)) / roundTo) * roundTo;
             double roundedY = Math.Round((Canvas.GetTop(canvas)) / roundTo) * roundTo;
 
+            float movedX = (float)roundedX;
+            float movedY = (float)roundedY;
+
             Canvas.SetLeft(canvas, roundedX);
             Canvas.SetTop(canvas, roundedY);
-
-            movedX = (float)roundedX;
-            movedY = (float)roundedY;
 
             var canvasGuid = canvas.Tag;
 
@@ -633,6 +684,8 @@ namespace UIBlueprintEditor
             _preciseButton.Visibility = Visibility.Visible;
             _unhideButton.Visibility = Visibility.Visible;
             _switchViewButton.Visibility = Visibility.Visible;
+            _uiSizeText.Visibility = Visibility.Visible;
+            _uiComponentInfo.Visibility = Visibility.Visible;
 
             EbxAssetEntry ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
 
@@ -666,8 +719,6 @@ namespace UIBlueprintEditor
 
                         App.EditorWindow.DataExplorer.RefreshItems();
 
-                        _uiComponentInfo.Visibility = Visibility.Visible;
-
                         _uiComponentInfo.Text = 
                             string.Format(
                             "InstanceName: '{0}'\nOffset: {1}, {2}\nAnchor: {3}, {4}\n{5}", 
@@ -693,7 +744,8 @@ namespace UIBlueprintEditor
             {
                 Canvas canvas = sender as Canvas;
 
-                _uiComponentInfo.Visibility = Visibility.Hidden;
+                // sets the ZIndex above everything else so it doesn't glitch when moving near other ui elements
+                Canvas.SetZIndex(canvas, 9999);
 
                 System.Windows.Point newPosition = Mouse.GetPosition(_uiCanvas);
 
@@ -708,10 +760,13 @@ namespace UIBlueprintEditor
                 _preciseButton.Visibility = Visibility.Hidden;
                 _unhideButton.Visibility = Visibility.Hidden;
                 _switchViewButton.Visibility = Visibility.Hidden;
+                _uiSizeText.Visibility = Visibility.Hidden;
+                _uiComponentInfo.Visibility = Visibility.Hidden;
 
                 if (debugging)
                 {
-                    // this can make it very laggy if you have debugging on
+                    // this can make it very laggy if you have debugging on and not commented out
+
                     //App.Logger.Log(left.ToString());
                     //App.Logger.Log(top.ToString());
 
@@ -728,13 +783,14 @@ namespace UIBlueprintEditor
         
         private void UnhideButton_Click(object sender, RoutedEventArgs e)
         {
+            // loops through each canvas in _uiCanvas and sets them all visible
             foreach (Canvas canvas in _uiCanvas.Children)
             {
                 canvas.Visibility = Visibility.Visible;
             }
         }
 
-        // switches between a 10 and 1 which changes how precise ui dragging is
+        // switches between 25 and 1 which changes how precise ui dragging is (idk why i didn't just call it "Snapping" lol)
         bool isPrecise = true;
         private void PreciseButton_Click(object sender, RoutedEventArgs e)
         {
@@ -769,7 +825,7 @@ namespace UIBlueprintEditor
             _uiCanvas.UpdateLayout();
         }
 
-        // unused thing
+        // unused thing that was gonna add ui elements
         private void AddObjectButton_Click(object sender, RoutedEventArgs e)
         {
             App.Logger.Log("added object");
