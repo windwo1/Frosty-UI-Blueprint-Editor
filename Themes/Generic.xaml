@@ -19,7 +19,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type local:UIEditor}">
                     <Grid>
-                        <ctrl:FrostyDockablePanel x:Name="PART_UIEditorLayer" Panel.ZIndex="-1000" Visibility="Hidden" Grid.Column="0" Title="" TitleBarVisible="False">
+                        <ctrl:FrostyDockablePanel ClipToBounds="True" x:Name="PART_UIEditorLayer" Visibility="Hidden" Grid.Column="0" Title="" TitleBarVisible="False">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="25"/>
@@ -30,22 +30,34 @@
                                     <ImageBrush ImageSource="/UIBlueprintEditor;component/Images/Grid.png" TileMode="Tile" Viewport="0,0,28,28" ViewportUnits="Absolute" Stretch="None"/>
                                 </Grid.Background>
 
-                                <Border>
+                                <Border Panel.ZIndex="10">
                                     <DockPanel>
                                         <Border Background="{StaticResource ControlBackground}" Margin="0"/>
                                     </DockPanel>
                                 </Border>
                                 
                                 <!-- UI Editor -->
-                                <Button x:Name="PART_AddObject" Visibility="Collapsed" HorizontalAlignment="Left" Width="25" Height="25" Margin="2,0,0,0" ToolTip="Add a UI item" IsEnabled="True">
+                                <Button Panel.ZIndex="10" x:Name="PART_AddObject" Visibility="Collapsed" HorizontalAlignment="Left" Width="25" Height="25" Margin="2,0,0,0" ToolTip="Add a UI item" IsEnabled="True">
                                     <Button.Content>
                                         <Image Width="14" Source="/FrostyEditor;component/Images/Add.png"/>
                                     </Button.Content>
                                 </Button>
 
-                                <Button x:Name="PART_Refresh" HorizontalAlignment="Left" Width="25" Height="25" Margin="2,0,0,0" ToolTip="Refresh UI" IsEnabled="True">
+                                <Button Panel.ZIndex="10" x:Name="PART_Refresh" HorizontalAlignment="Left" Width="25" Height="25" Margin="2,0,0,0" ToolTip="Refresh UI" IsEnabled="True">
                                     <Button.Content>
                                         <Image Width="14" Source="/UIBlueprintEditor;component/Images/Refresh.png"/>
+                                    </Button.Content>
+                                </Button>
+
+                                <Button Panel.ZIndex="10" x:Name="PART_Precise" HorizontalAlignment="Left" Width="25" Height="25" Margin="30,0,0,0" ToolTip="Precise Movement (ON)" IsEnabled="True">
+                                    <Button.Content>
+                                        <Image x:Name="PART_PreciseImage" Width="14" Source="/UIBlueprintEditor;component/Images/Precise_ON.png"/>
+                                    </Button.Content>
+                                </Button>
+
+                                <Button Panel.ZIndex="10" x:Name="PART_Unhide" HorizontalAlignment="Left" Width="25" Height="25" Margin="58,0,0,0" ToolTip="Unhide all UI" IsEnabled="True">
+                                    <Button.Content>
+                                        <Image x:Name="PART_UnhideImage" Width="14" Source="/FrostyEditor;component/Images/Reference.png"/>
                                     </Button.Content>
                                 </Button>
 
@@ -57,6 +69,15 @@
                                         </Canvas>
                                     </Grid>
                                 </Viewbox>
+
+                                <TextBlock Panel.ZIndex="10" x:Name="PART_UIComponentInfo" Visibility="Visible" Grid.Row="1" Margin="5,5,5,5" HorizontalAlignment="Left" VerticalAlignment="Bottom" Opacity="0.5">
+                                    InstanceName: '' <LineBreak/>
+                                    Offset: 0, 0 <LineBreak/>
+                                    Anchor: 0, 0 <LineBreak/>
+                                    00000000-0000-0000-0000-000000000000
+                                </TextBlock>
+
+                                <TextBlock Panel.ZIndex="10" x:Name="PART_UISizeText" FontSize="24" Visibility="Visible" Grid.Row="1" Margin="5,5,5,5" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.8"/>
                             </Grid>
                         </ctrl:FrostyDockablePanel>
 
