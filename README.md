@@ -18,12 +18,18 @@ Then, Right click the project to add the references:
 - FrostyControls.dll
 - LocalizedStringPlugin.dll
 - TexturePlugin.dll
+- SharpDX.Direct3D11.dll
+- SharpDX.DXGI.dll
 
 You can get these from your Frosty Editor folder.
 Then just build the project by right clicking the project and clicking build, or you can press Ctrl + B. You can put the
 UIBlueprintEditor.dll in the Plugins folder in Frosty Editor.
 
 ## Update log
+v1.1.0.1:
+
+- Re-added the "Use Anchor" option. Having this enabled will make the UI positioning use Anchor instead of Offset, which is better since Anchor will put any UI element at the same position on the screen no matter what size the screen is. You can find this at "Tools > Options > UI Editor Options" 
+
 v1.1.0.0:
 
 - Arrow key/WASD movement for precise movements

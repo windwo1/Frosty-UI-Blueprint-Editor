@@ -1,31 +1,20 @@
 using Frosty.Core;
 using Frosty.Core.Controls;
-using Frosty.Core.Windows;
-using FrostySdk.Attributes;
 using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
 using FrostySdk.IO;
 using FrostySdk.Managers;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
-using System.Windows.Navigation;
 using UIBlueprintEditor.Editor.Text;
 
 namespace UIBlueprintEditor.Editor
@@ -1052,11 +1041,7 @@ namespace UIBlueprintEditor.Editor
                     {
                         selectedElement = uiComponent;
 
-                        // the useAnchor option is removed here because for some reason the anchor positioning wasn't accurate
-                        // so the 'else' part won't do anything for now
-
-                        bool useAnchor = false;
-                        //bool useAnchor = Config.Get<bool>("UseAnchor", false);
+                        bool useAnchor = Config.Get<bool>("UseAnchor", false);
 
                         if (!useAnchor)
                         {
@@ -1070,8 +1055,28 @@ namespace UIBlueprintEditor.Editor
                         else
                         {
                             // if useAnchor is true, we remove the offset and set the position with anchor
-                            uiComponent.Internal.Anchor.X = movedX / rootObject.Object.Internal.Size.X;
-                            uiComponent.Internal.Anchor.Y = movedY / rootObject.Object.Internal.Size.Y;
+
+                            var width = uiComponent.Internal.Size.X;
+                            var height = uiComponent.Internal.Size.Y;
+
+                            // if this is true, its a widget reference
+                            if (uiComponent.Internal.UseElementSize != null)
+                            {
+                                if (uiComponent.Internal.UseElementSize)
+                                {
+                                    var widgetGuid = ((PointerRef)uiComponent.Internal.Blueprint).External.FileGuid;
+                                    var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
+
+                                    EbxAsset widgetAsset = App.AssetManager.GetEbx(widgetEbx);
+                                    dynamic rootObjectWidget = widgetAsset.RootObject;
+
+                                    width = rootObjectWidget.Object.Internal.Size.X;
+                                    height = rootObjectWidget.Object.Internal.Size.Y;
+                                }
+                            }
+
+                            uiComponent.Internal.Anchor.X = movedX / (rootObject.Object.Internal.Size.X - width);
+                            uiComponent.Internal.Anchor.Y = movedY / (rootObject.Object.Internal.Size.Y - height);
 
                             uiComponent.Internal.Offset.X = 0;
                             uiComponent.Internal.Offset.Y = 0;

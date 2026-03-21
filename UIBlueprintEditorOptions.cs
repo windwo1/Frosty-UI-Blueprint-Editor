@@ -31,10 +31,10 @@ namespace UIBlueprintEditor
         [Description("Sets the amount of pixels arrow keys will move by")]
         public int ArrowKeyMovementSetting { get; set; } = 5;
 
-        //[Category("Movement")]
-        //[DisplayName("Use Anchor")]
-        //[Description("If true, dragging UI elements will move them with Anchor instead of Offset")]
-        //public bool UseAnchor { get; set; } = false;
+        [Category("Movement")]
+        [DisplayName("Use Anchor")]
+        [Description("If true, dragging UI elements will move them with Anchor instead of Offset")]
+        public bool UseAnchor { get; set; } = false;
 
         [Category("Rendering")]
         [DisplayName("Render Textures")]
@@ -64,7 +64,7 @@ namespace UIBlueprintEditor
 
             PreciseMovementSetting = Config.Get<int>("PreciseMovementSetting", 25);
             ArrowKeyMovementSetting = Config.Get<int>("ArrowKeyMovementSetting", 5);
-            //UseAnchor = Config.Get<bool>("UseAnchor", false);
+            UseAnchor = Config.Get<bool>("UseAnchor", false);
 
             RenderTextures = Config.Get<bool>("RenderTextures", true);
             RenderText = Config.Get<bool>("RenderText", true);
@@ -79,7 +79,7 @@ namespace UIBlueprintEditor
 
             Config.Add("PreciseMovementSetting", PreciseMovementSetting);
             Config.Add("ArrowKeyMovementSetting", ArrowKeyMovementSetting);
-            //Config.Add("UseAnchor", UseAnchor);
+            Config.Add("UseAnchor", UseAnchor);
 
             Config.Add("RenderTextures", RenderTextures);
             Config.Add("RenderText", RenderText);

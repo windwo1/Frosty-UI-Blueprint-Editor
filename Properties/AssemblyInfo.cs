@@ -23,7 +23,7 @@ using System.Windows;
 
 [assembly: PluginDisplayName("UI Blueprint Editor")]
 [assembly: PluginAuthor("Window")]
-[assembly: PluginVersion("1.1.0.0")]
+[assembly: PluginVersion("1.1.0.1")]
 
 [assembly: RegisterOptionsExtension(typeof(UIEditorOptions))]
 [assembly: RegisterAssetDefinition("UIWidgetBlueprint", typeof(UIBlueprintAssetDefinition))]
