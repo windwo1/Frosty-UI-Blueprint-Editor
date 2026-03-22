@@ -26,6 +26,10 @@ Then just build the project by right clicking the project and clicking build, or
 UIBlueprintEditor.dll in the Plugins folder in Frosty Editor.
 
 ## Update log
+v1.1.0.2
+
+- Fixed a single line of code which messed up the anchors for widget references.
+
 v1.1.0.1:
 
 - Re-added the "Use Anchor" option. Having this enabled will make the UI positioning use Anchor instead of Offset, which is better since Anchor will put any UI element at the same position on the screen no matter what size the screen is. You can find this at "Tools > Options > UI Editor Options" 

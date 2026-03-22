@@ -1062,7 +1062,7 @@ namespace UIBlueprintEditor.Editor
                             // if this is true, its a widget reference
                             if (uiComponent.Internal.UseElementSize != null)
                             {
-                                if (uiComponent.Internal.UseElementSize)
+                                if (!uiComponent.Internal.UseElementSize)
                                 {
                                     var widgetGuid = ((PointerRef)uiComponent.Internal.Blueprint).External.FileGuid;
                                     var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
