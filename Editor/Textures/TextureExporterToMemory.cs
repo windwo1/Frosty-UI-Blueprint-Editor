@@ -11,7 +11,7 @@ using D3D11 = SharpDX.Direct3D11;
 
 // Copy + pasted TextureExporter from TexturePlugin, but writes the textures to memory instead
 
-namespace UIBlueprintEditor.Editor
+namespace UIBlueprintEditor.Editor.Textures
 {
     [EbxClassMeta(EbxFieldType.Struct)]
     public class FrostyTextureSettingsItem
@@ -212,7 +212,7 @@ namespace UIBlueprintEditor.Editor
                         {
                             int mipSize = (int)textureAsset.MipSizes[mip];
 
-                            srcStream.Position = mipOffsets[mip] + (mipSize * slice);
+                            srcStream.Position = mipOffsets[mip] + mipSize * slice;
                             srcStream.Read(tmpBuf, 0, mipSize);
                             writer.Write(tmpBuf, 0, mipSize);
                         }
