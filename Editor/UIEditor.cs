@@ -18,6 +18,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using UIBlueprintEditor.Editor.Text;
 using UIBlueprintEditor.Editor.Textures;
 using UIBlueprintEditor.Editor.UI;
@@ -30,7 +31,6 @@ namespace UIBlueprintEditor.Editor
     [TemplatePart(Name = PART_SwitchView, Type = typeof(Button))]
     [TemplatePart(Name = PART_DefaultEditorLayer, Type = typeof(Grid))]
     [TemplatePart(Name = PART_UIEditorLayer, Type = typeof(Grid))]
-    [TemplatePart(Name = PART_AddObject, Type = typeof(Button))]
     [TemplatePart(Name = PART_UISize, Type = typeof(Grid))]
     [TemplatePart(Name = PART_UICanvas, Type = typeof(Canvas))]
     [TemplatePart(Name = PART_Refresh, Type = typeof(Button))]
@@ -57,7 +57,6 @@ namespace UIBlueprintEditor.Editor
         private const string PART_SwitchView = "PART_SwitchView";
         private const string PART_DefaultEditorLayer = "PART_DefaultEditorLayer";
         private const string PART_UIEditorLayer = "PART_UIEditorLayer";
-        private const string PART_AddObject = "PART_AddObject";
         private const string PART_UISize = "PART_UISize";
         private const string PART_TemplateUI = "PART_TemplateUI";
         private const string PART_UICanvas = "PART_UICanvas";
@@ -82,7 +81,6 @@ namespace UIBlueprintEditor.Editor
         private Button _switchViewButton;
         private FrameworkElement _uiEditorLayer;
         private FrameworkElement _defaultEditorLayer;
-        private Button _addObjectButton;
         private FrameworkElement _uiSize;
         private TextBlock _zoomPercent;
         private Image _preciseImage;
@@ -147,6 +145,8 @@ namespace UIBlueprintEditor.Editor
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(UIEditor), new FrameworkPropertyMetadata(typeof(UIEditor)));
         }
+
+        #region OnApplyTemplate
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
@@ -157,9 +157,6 @@ namespace UIBlueprintEditor.Editor
 
             _switchViewButton = GetTemplateChild(PART_SwitchView) as Button;
             _switchViewButton.Click += SwitchViewButton_Click;
-
-            _addObjectButton = GetTemplateChild(PART_AddObject) as Button;
-            _addObjectButton.Click += AddObjectButton_Click;
 
             _uiSize = GetTemplateChild(PART_UISize) as FrameworkElement;
 
@@ -204,11 +201,11 @@ namespace UIBlueprintEditor.Editor
             _tabControl = GetTemplateChild(PART_TabControl) as FrostyTabControl;
 
             // arrow key/WASD precise movement
-            Movement movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiComponentInfo, _tabProperties, _tabPropertiesContent);
-            Movement = movement;
-            KeyDown += (sender, e) => movement.KeyFocus(editorActive, this);
-            KeyDown += movement.UICanvasKeyDown;
+            Movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiComponentInfo, _tabProperties, _tabPropertiesContent);
+            KeyDown += Movement.UICanvasKeyDown;
+            KeyUp += Movement.UICanvasKeyUp;
         }
+        #endregion
 
         // switches between the default editor and the ui editor
         private void SwitchViewButton_Click(object sender, RoutedEventArgs e)
@@ -264,8 +261,6 @@ namespace UIBlueprintEditor.Editor
         // loads every asset/component in the ui blueprint that you're currently on
         private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
         {
-            _uiComponentInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
-            _tabProperties.IsEnabled = false;
 
             EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
             dynamic rootObject = asset.RootObject;
@@ -281,12 +276,16 @@ namespace UIBlueprintEditor.Editor
 
             if (!isWidget)
             {
-                // if its not a widget we set the screen size
+                // some stuff that should only run once
+
                 _uiCanvas.Children.Clear();
                 _uiSize.Width = mainSizeX;
                 _uiSize.Height = mainSizeY;
 
                 _uiSizeText.Text = string.Format("Size: {0}, {1}", mainSizeX, mainSizeY);
+
+                _uiComponentInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
+                _tabProperties.IsEnabled = false;
             }
 
             bool ShowAllUI = Config.Get("ShowAllUI", false);
@@ -492,12 +491,6 @@ namespace UIBlueprintEditor.Editor
             _uiCanvas.UpdateLayout();
 
             App.Logger.Log("Refreshed UI");
-        }
-
-        // unused thing that was gonna add ui elements
-        private void AddObjectButton_Click(object sender, RoutedEventArgs e)
-        {
-            App.Logger.Log("added object");
         }
     }
 }

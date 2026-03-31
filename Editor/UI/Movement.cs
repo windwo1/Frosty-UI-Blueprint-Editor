@@ -54,6 +54,31 @@ namespace UIBlueprintEditor.Editor.UI
             this._uiComponentInfo = _uiComponentInfo;
             this._tabProperties = _tabProperties;
             this._tabPropertiesContent = _tabPropertiesContent;
+
+            _tabPropertiesContent.OnModified += (sender, e) =>
+            {
+                if (selectedCanvas != null && selectedElement != null)
+                {
+                    Canvas parent = selectedCanvas.Parent as Canvas;
+                    dynamic rootObject = CurrentRootObject.Get();
+
+                    Canvas newCanvas = LoadElement.Load(selectedElement, false, this, rootObject, parent, LoadUI);
+
+                    if (newCanvas != null)
+                    {
+                        int zindex = parent.Children.IndexOf(selectedCanvas);
+
+                        parent.Children.Remove(selectedCanvas);
+
+                        // LoadElement.Load already adds the canvas to the parent, but we want the layering
+                        // to be the same so it's removed then added back at the right zindex
+                        parent.Children.Remove(newCanvas);
+                        parent.Children.Insert(zindex, newCanvas);
+
+                        selectedCanvas = newCanvas;
+                    }
+                }
+            };
         }
 
         #region Dragging
@@ -84,7 +109,7 @@ namespace UIBlueprintEditor.Editor.UI
         private void CanvasMouseUp(object sender, MouseButtonEventArgs e)
         {
             dragging = false;
-            App.Logger.Log("up");
+
             Canvas canvas = sender as Canvas;
             selectedCanvas = canvas;
 
@@ -220,17 +245,6 @@ namespace UIBlueprintEditor.Editor.UI
             // refreshes the data explorer so that it shows as modified on the left
             App.EditorWindow.DataExplorer.RefreshItems();
 
-            bool isWidget = selectedElement.Internal.ToString() == "FrostySdk.Ebx.UIElementWidgetReferenceEntityData";
-
-            Canvas newCanvas = LoadElement.Load(selectedElement, isWidget, this, rootObject, canvas.Parent as Canvas, LoadUI);
-            if (newCanvas != null)
-            {
-                selectedCanvas = newCanvas;
-            }
-
-            // idk of any way to delete an element, so we'll just hide it
-            canvas.Visibility = Visibility.Collapsed;
-
             _uiComponentInfo.Text =
                 string.Format(
                 "InstanceName: '{0}'\nOffset: {1}, {2}\nAnchor: {3}, {4}\n{5}",
@@ -247,7 +261,7 @@ namespace UIBlueprintEditor.Editor.UI
             }
 
             // updates the property grid tab
-            _tabPropertiesContent.Object = null;
+            _tabPropertiesContent.Object = rootObject;
             _tabPropertiesContent.Object = selectedElement.Internal;
 
             _tabProperties.IsEnabled = true;
@@ -321,7 +335,8 @@ namespace UIBlueprintEditor.Editor.UI
 
             int move = Config.Get("ArrowKeyMovementSetting", 5);
 
-            // this stops the arrow keys from navigating to some random place, otherwise arrow keys would just break
+            // removed arrow keys so that it's only wasd, arrow keys were causing a lot of issues
+            // and i just couldnt be bothered
             if (e.Key == Key.Up || e.Key == Key.Left || e.Key == Key.Down || e.Key == Key.Right)
             {
                 e.Handled = true;
@@ -348,7 +363,7 @@ namespace UIBlueprintEditor.Editor.UI
                 Canvas.SetLeft(selectedCanvas, left + move);
                 movementKey = true;
             }
-            
+
             // checks if its a movement key (wasd or arrow keys) so that nothing happens if you touch any other keys
             if (movementKey)
             {
@@ -442,10 +457,18 @@ namespace UIBlueprintEditor.Editor.UI
                     selectedElement.Internal.Anchor.X,
                     selectedElement.Internal.Anchor.Y,
                     guid.ToString());
-
-                // would've refreshed the property grid here, but i realised you have to click the element again
-                // to use arrow keys on it which will refresh it anyway
             }
+        }
+
+        public void UICanvasKeyUp(object sender, KeyEventArgs e)
+        {
+            if (_uiCanvas.IsFocused)
+                return;
+
+            dynamic rootObject = CurrentRootObject.Get();
+
+            _tabPropertiesContent.Object = rootObject;
+            _tabPropertiesContent.Object = selectedElement.Internal;
         }
 
         // shows a transparent background when your mouse is over the canvas
@@ -478,14 +501,6 @@ namespace UIBlueprintEditor.Editor.UI
             {
                 Canvas canvas = sender as Canvas;
                 canvas.Visibility = Visibility.Hidden;
-            }
-        }
-
-        public void KeyFocus(bool editorActive, UIEditor editor)
-        {
-            if (editorActive)
-            {
-                editor.Focus();
             }
         }
     }

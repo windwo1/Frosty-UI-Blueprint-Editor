@@ -20,8 +20,8 @@ namespace UIBlueprintEditor.Editor.UI
         public double actualWidth;
         public double actualHeight;
 
-        private double positionX;
-        private double positionY;
+        public double positionX;
+        public double positionY;
 
         public UIBlueprintElement(dynamic uiComponent, bool widget, Movement movement)
         {
