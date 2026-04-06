@@ -29,19 +29,65 @@
                         <Border Grid.Column="2" Grid.Row="1">
                             <Grid>
                                 <ctrl:FrostyTabControl Name="PART_TabControl" Background="Transparent" Foreground="{StaticResource FontColor}">
-                                    <ctrl:FrostyTabItem x:Name="PART_TabLayers" Icon="/UIBlueprintEditor;component/Images/Layers.png" Header="Layers" CloseButtonVisible="False">
-                                        <ctrl:FrostyDockablePanel TitleBarVisible="False" Title="Layers" BorderVisible="False">
-                                            <Rectangle Fill="Red"/>
-                                        </ctrl:FrostyDockablePanel>
-                                    </ctrl:FrostyTabItem>
                                     <ctrl:FrostyTabItem x:Name="PART_TabToolbox" Icon="/UIBlueprintEditor;component/Images/Toolbox.png" Header="Toolbox" CloseButtonVisible="False">
                                         <ctrl:FrostyDockablePanel TitleBarVisible="False" Title="Toolbox" BorderVisible="False">
-                                            <Rectangle Fill="Lime"/>
+                                            <StackPanel x:Name="PART_TabToolboxContent" Margin="4">
+                                                <Button Height="26" Margin="1">
+                                                    <Button.Content>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="12" Height="12" Margin="5" Source="/UIBlueprintEditor;component/Images/IconBitmap.png"/>
+                                                            <Border>
+                                                                <TextBlock Text="Bitmap Element" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button.Content>
+                                                </Button>
+                                                <Button Height="26" Margin="1" HorizontalContentAlignment="Left">
+                                                    <Button.Content>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="12" Height="12" Margin="5" Source="/UIBlueprintEditor;component/Images/IconText.png"/>
+                                                            <Border>
+                                                                <TextBlock Text="Text Field Element" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button.Content>
+                                                </Button>
+                                                <Button Height="26" Margin="1" HorizontalContentAlignment="Left">
+                                                    <Button.Content>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="12" Height="12" Margin="5" Source="/UIBlueprintEditor;component/Images/IconFill.png"/>
+                                                            <Border>
+                                                                <TextBlock Text="Fill Element" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button.Content>
+                                                </Button>
+                                                <Button Height="26" Margin="1" HorizontalContentAlignment="Left">
+                                                    <Button.Content>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="12" Height="12" Margin="5" Source="/UIBlueprintEditor;component/Images/IconWidget.png"/>
+                                                            <Border>
+                                                                <TextBlock Text="Widget Reference Element" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button.Content>
+                                                </Button>
+                                                <Button Height="26" Margin="1" HorizontalContentAlignment="Left">
+                                                    <Button.Content>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="12" Height="12" Margin="5" Source="/UIBlueprintEditor;component/Images/IconOther.png"/>
+                                                            <Border>
+                                                                <TextBlock Text="Other..." VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button.Content>
+                                                </Button>
+                                            </StackPanel>
                                         </ctrl:FrostyDockablePanel>
                                     </ctrl:FrostyTabItem>
                                     <ctrl:FrostyTabItem x:Name="PART_TabProperties" Icon="/FrostyEditor;component/Images/Properties.png" Header="Properties" CloseButtonVisible="False">
                                         <ctrl:FrostyDockablePanel TitleBarVisible="False" Title="Properties" BorderVisible="False">
-                                            <core:FrostyPropertyGrid x:Name="PART_TabPropertiesContent" Asset="{Binding Asset, RelativeSource={RelativeSource TemplatedParent}}" Modified="{Binding AssetModified, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                            <core:FrostyPropertyGrid x:Name="PART_TabPropertiesContent"/>
                                         </ctrl:FrostyDockablePanel>
                                     </ctrl:FrostyTabItem>
                                 </ctrl:FrostyTabControl>

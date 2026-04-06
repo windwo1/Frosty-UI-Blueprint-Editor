@@ -71,10 +71,8 @@ namespace UIBlueprintEditor.Editor.Textures
 
     public static class TextureExporterToMemory
     {
-        public static byte[] textureBytes;
-
         // this export method removes a lot of stuff so if textures are buggy then that might be why
-        public static void Export(Texture textureAsset)
+        public static byte[] Export(Texture textureAsset)
         {
             byte[] ddsData = WriteToDDS(textureAsset);
 
@@ -91,7 +89,7 @@ namespace UIBlueprintEditor.Editor.Textures
 
                 TexturePlugin.FrostyTextureEditor.ReleaseBlob(blob);
 
-                textureBytes = memoryStream.ToArray();
+                return memoryStream.ToArray();
             }
         }
 

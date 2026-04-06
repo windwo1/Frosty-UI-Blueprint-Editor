@@ -14,55 +14,54 @@ namespace UIBlueprintEditor.Editor.UI
 {
     // a class that represents a ui element and is displayed on the main ui canvas (in UIEditor.cs)
     public class UIBlueprintElement : Canvas
-    { 
-        private dynamic uiComponent;
+    {
+        public double OriginalWidth;
+        public double OriginalHeight;
 
-        public double actualWidth;
-        public double actualHeight;
+        public double PositionX;
+        public double PositionY;
 
-        public double positionX;
-        public double positionY;
+        private dynamic _uiElement;
 
-        public UIBlueprintElement(dynamic uiComponent, bool widget, Movement movement)
+        public UIBlueprintElement(dynamic uiElement, bool widget, Movement movement, dynamic rootObject)
         {
-            this.uiComponent = uiComponent;
+            _uiElement = uiElement;
 
             // positioning / sizing
-            dynamic rootObject = CurrentRootObject.Get();
 
             double mainSizeX = rootObject.Object.Internal.Size.X;
             double mainSizeY = rootObject.Object.Internal.Size.Y;
 
-            double offsetX = uiComponent.Internal.Offset.X;
-            double offsetY = uiComponent.Internal.Offset.Y;
-            double anchorX = uiComponent.Internal.Anchor.X;
-            double anchorY = uiComponent.Internal.Anchor.Y;
+            double offsetX = uiElement.Internal.Offset.X;
+            double offsetY = uiElement.Internal.Offset.Y;
+            double anchorX = uiElement.Internal.Anchor.X;
+            double anchorY = uiElement.Internal.Anchor.Y;
 
-            double sizeX = uiComponent.Internal.Size.X;
-            double sizeY = uiComponent.Internal.Size.Y;
+            double sizeX = uiElement.Internal.Size.X;
+            double sizeY = uiElement.Internal.Size.Y;
 
             // these are the positions used for almost every ui element we'll create
             double finalX = anchorX * (mainSizeX - sizeX) + offsetX;
             double finalY = anchorY * (mainSizeY - sizeY) + offsetY;
-            positionX = finalX;
-            positionY = finalY;
+            PositionX = finalX;
+            PositionY = finalY;
 
             // if ShowAllUI is true, it will also include elements that have an alpha of 0
-            if (uiComponent.Internal.Alpha != null)
+            if (uiElement.Internal.Alpha != null)
             {
                 bool ShowAllUI = Config.Get("ShowAllUI", false);
 
-                Opacity = ShowAllUI ? 1 : uiComponent.Internal.Alpha;
+                Opacity = ShowAllUI ? 1 : uiElement.Internal.Alpha;
             }
 
-            actualWidth = sizeX;
-            actualHeight = sizeY;
+            OriginalWidth = sizeX;
+            OriginalHeight = sizeY;
 
             // if the size is negative it will return the absolute value to make sure it's not negative
             // otherwise it will just throw an exception
             Width = sizeX < 0 ? Math.Abs(sizeX) : sizeX;
             Height = sizeY < 0 ? Math.Abs(sizeY) : sizeY;
-            Tag = uiComponent.Internal.__InstanceGuid;
+            Tag = uiElement.Internal.__InstanceGuid;
 
             RotateElement(this);
 
@@ -80,10 +79,10 @@ namespace UIBlueprintEditor.Editor.UI
         {
             // the rotation is an xyz value but it seems like x and y just warps it
             // so only z is used
-            double rotation = uiComponent.Internal.UIElementTransform.Rotation.z;
+            double rotation = _uiElement.Internal.UIElementTransform.Rotation.z;
 
-            double rotationPivotX = uiComponent.Internal.UIElementTransform.RotationPivot.x;
-            double rotationPivotY = uiComponent.Internal.UIElementTransform.RotationPivot.y;
+            double rotationPivotX = _uiElement.Internal.UIElementTransform.RotationPivot.x;
+            double rotationPivotY = _uiElement.Internal.UIElementTransform.RotationPivot.y;
 
             var transformGroupCanvas = new TransformGroup();
 

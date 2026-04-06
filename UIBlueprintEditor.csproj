@@ -25,12 +25,16 @@
 
 	<ItemGroup>
 	  <None Remove="Images\Grid.png" />
-	  <None Remove="Images\Layers.png" />
+	  <None Remove="Images\IconBitmap.png" />
+	  <None Remove="Images\IconFill.png" />
+	  <None Remove="Images\IconOther.png" />
+	  <None Remove="Images\IconText.png" />
+	  <None Remove="Images\IconWidget.png" />
+	  <None Remove="Images\Placeholder.png" />
 	  <None Remove="Images\Precise_OFF.png" />
 	  <None Remove="Images\Precise_ON.png" />
 	  <None Remove="Images\Refresh.png" />
 	  <None Remove="Images\Toolbox.png" />
-	  <None Remove="Images\UITypeIcon.png" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -63,7 +67,12 @@
 
 	<ItemGroup>
 	  <Resource Include="Images\Grid.png" />
-	  <Resource Include="Images\Layers.png" />
+	  <Resource Include="Images\IconBitmap.png" />
+	  <Resource Include="Images\IconFill.png" />
+	  <Resource Include="Images\IconOther.png" />
+	  <Resource Include="Images\IconText.png" />
+	  <Resource Include="Images\IconWidget.png" />
+	  <Resource Include="Images\Placeholder.png" />
 	  <Resource Include="Images\Precise_OFF.png" />
 	  <Resource Include="Images\Precise_ON.png" />
 	  <Resource Include="Images\Refresh.png" />

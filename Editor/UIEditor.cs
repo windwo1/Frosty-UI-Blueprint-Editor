@@ -1,26 +1,16 @@
 using Frosty.Controls;
 using Frosty.Core;
 using Frosty.Core.Controls;
-using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
 using FrostySdk.IO;
 using FrostySdk.Managers;
-using Microsoft.CSharp.RuntimeBinder;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Numerics;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
-using UIBlueprintEditor.Editor.Text;
-using UIBlueprintEditor.Editor.Textures;
 using UIBlueprintEditor.Editor.UI;
 
 namespace UIBlueprintEditor.Editor
@@ -45,7 +35,6 @@ namespace UIBlueprintEditor.Editor
     [TemplatePart(Name = PART_Column1, Type = typeof(ColumnDefinition))]
     [TemplatePart(Name = PART_ColumnSplitter, Type = typeof(ColumnDefinition))]
     [TemplatePart(Name = PART_Column2, Type = typeof(ColumnDefinition))]
-    [TemplatePart(Name = PART_TabLayers, Type = typeof(FrostyTabItem))]
     [TemplatePart(Name = PART_TabToolbox, Type = typeof(FrostyTabItem))]
     [TemplatePart(Name = PART_TabProperties, Type = typeof(FrostyTabItem))]
     [TemplatePart(Name = PART_TabPropertiesContent, Type = typeof(FrostyPropertyGrid))]
@@ -72,7 +61,6 @@ namespace UIBlueprintEditor.Editor
         private const string PART_Column1 = "PART_Column1";
         private const string PART_ColumnSplitter = "PART_ColumnSplitter";
         private const string PART_Column2 = "PART_Column2";
-        private const string PART_TabLayers = "PART_TabLayers";
         private const string PART_TabToolbox = "PART_TabToolbox";
         private const string PART_TabProperties = "PART_TabProperties";
         private const string PART_TabPropertiesContent = "PART_TabPropertiesContent";
@@ -97,33 +85,33 @@ namespace UIBlueprintEditor.Editor
         private Button _preciseButton;
         private Button _unhideButton;
         private TextBlock _uiSizeText;
-        private TextBlock _uiComponentInfo;
+        private TextBlock _uiElementInfo;
         private FrostyTabItem _tabProperties;
         private FrostyPropertyGrid _tabPropertiesContent;
+        private StackPanel _tabLayersContent;
+        private Button _tabLayersUp;
+        private Button _tabLayersDown;
         #endregion
 
-        public static readonly bool debugging = false; // make this 'true' to have a lot of useful info logged
+        public static readonly bool Debugging = false; // make this 'true' to have a lot of useful info logged
 
         // these dictionaries are used later to reference certain values using the TextureId as the key
-        public static Dictionary<dynamic, dynamic> mappingIdToMapping = new Dictionary<dynamic, dynamic>();
-        public static Dictionary<dynamic, dynamic> mappingMinValue = new Dictionary<dynamic, dynamic>();
-        public static Dictionary<dynamic, dynamic> mappingMaxValue = new Dictionary<dynamic, dynamic>();
-        public static Dictionary<dynamic, BitmapImage> mappingTexture = new Dictionary<dynamic, BitmapImage>();
-
-        private Movement Movement;
+        public static Dictionary<dynamic, dynamic> MappingIdToMapping = new Dictionary<dynamic, dynamic>();
+        public static Dictionary<dynamic, dynamic> MappingMinValue = new Dictionary<dynamic, dynamic>();
+        public static Dictionary<dynamic, dynamic> MappingMaxValue = new Dictionary<dynamic, dynamic>();
+        public static Dictionary<dynamic, BitmapImage> MappingTexture = new Dictionary<dynamic, BitmapImage>();
 
         // this is used for the precise movement / snapping
-        public static int roundTo = 1;
+        public static int RoundTo = 1;
 
-        private bool panning = false;
-
-        private TransformGroup transformGroup;
-        private ScaleTransform scaleTransform;
-        private TranslateTransform translateTransform;
-
-        private bool editorActive = false;
-
-        private Action<object> refreshPropertyGrid;
+        private Movement _movement;
+        private Canvas _selectedLayer;
+        private TransformGroup _transformGroup;
+        private ScaleTransform _scaleTransform;
+        private TranslateTransform _translateTransform;
+        private Action<object> _refreshPropertyGrid;
+        private bool _editorActive = false;
+        private bool _panning = false;
 
         public UIEditor(ILogger inLogger) : base(inLogger)
         {
@@ -133,12 +121,12 @@ namespace UIBlueprintEditor.Editor
             MouseUp += UICanvas_MouseUp;
             MouseMove += UICanvas_MouseMove;
 
-            transformGroup = new TransformGroup();
-            scaleTransform = new ScaleTransform(1, 1);
-            translateTransform = new TranslateTransform();
+            _transformGroup = new TransformGroup();
+            _scaleTransform = new ScaleTransform(1, 1);
+            _translateTransform = new TranslateTransform();
 
-            transformGroup.Children.Add(scaleTransform);
-            transformGroup.Children.Add(translateTransform);
+            _transformGroup.Children.Add(_scaleTransform);
+            _transformGroup.Children.Add(_translateTransform);
         }
 
         static UIEditor()
@@ -170,7 +158,7 @@ namespace UIBlueprintEditor.Editor
 
             _preciseImage = GetTemplateChild(PART_PreciseImage) as Image;
 
-            _uiComponentInfo = GetTemplateChild(PART_UIComponentInfo) as TextBlock;
+            _uiElementInfo = GetTemplateChild(PART_UIComponentInfo) as TextBlock;
 
             _unhideButton = GetTemplateChild(PART_Unhide) as Button;
             _unhideButton.Click += UnhideButton_Click;
@@ -182,7 +170,7 @@ namespace UIBlueprintEditor.Editor
             _backgroundGrid = GetTemplateChild(PART_BackgroundGrid) as ImageBrush;
 
             _pgAsset = GetTemplateChild(PART_AssetPropertyGrid) as FrostyPropertyGrid;
-            refreshPropertyGrid = new Action<object>((_) =>
+            _refreshPropertyGrid = new Action<object>((_) =>
             {
                 _pgAsset.Object = null;
                 _pgAsset.Object = asset.RootObject;
@@ -192,7 +180,6 @@ namespace UIBlueprintEditor.Editor
             _columnSplitter = GetTemplateChild(PART_ColumnSplitter) as ColumnDefinition;
             _column2 = GetTemplateChild(PART_Column2) as ColumnDefinition;
 
-            _tabLayers = GetTemplateChild(PART_TabLayers) as FrostyTabItem;
             _tabToolbox = GetTemplateChild(PART_TabToolbox) as FrostyTabItem;
             _tabProperties = GetTemplateChild(PART_TabProperties) as FrostyTabItem;
 
@@ -201,9 +188,9 @@ namespace UIBlueprintEditor.Editor
             _tabControl = GetTemplateChild(PART_TabControl) as FrostyTabControl;
 
             // arrow key/WASD precise movement
-            Movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiComponentInfo, _tabProperties, _tabPropertiesContent);
-            KeyDown += Movement.UICanvasKeyDown;
-            KeyUp += Movement.UICanvasKeyUp;
+            _movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiElementInfo, _tabProperties, _tabPropertiesContent);
+            KeyDown += _movement.UICanvasKeyDown;
+            KeyUp += _movement.UICanvasKeyUp;
         }
         #endregion
 
@@ -211,8 +198,8 @@ namespace UIBlueprintEditor.Editor
         private void SwitchViewButton_Click(object sender, RoutedEventArgs e)
         {
             // toggles the bool
-            editorActive = !editorActive;
-            if (editorActive)
+            _editorActive = !_editorActive;
+            if (_editorActive)
             {
                 // hides the default view and shows the editor view 
                 _uiEditorLayer.Visibility = Visibility.Visible;
@@ -248,24 +235,32 @@ namespace UIBlueprintEditor.Editor
 
                 // refreshes the asset that you're on so any changes you made won't be overwritten if you
                 // change something in the normal editor
-                refreshPropertyGrid.Invoke(null);
+                _refreshPropertyGrid.Invoke(null);
 
                 // clears the texture dictionaries so that new textures will be created everytime
-                mappingIdToMapping.Clear();
-                mappingMinValue.Clear();
-                mappingMaxValue.Clear();
-                mappingTexture.Clear();
+                MappingIdToMapping.Clear();
+                MappingMinValue.Clear();
+                MappingMaxValue.Clear();
+                MappingTexture.Clear();
+
+                _tabLayersContent.Children.Clear();
+
+                _movement.SelectedElement = null;
+                _movement.SelectedCanvas = null;
+
+                _selectedLayer = null;
+                _tabLayersUp.IsEnabled = false;
+                _tabLayersDown.IsEnabled = false;
             }
         }
 
         // loads every asset/component in the ui blueprint that you're currently on
         private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
         {
-
             EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
             dynamic rootObject = asset.RootObject;
 
-            if (debugging)
+            if (Debugging)
             {
                 App.Logger.Log("");
                 App.Logger.Log("---- " + rootObject.Name + " ----");
@@ -284,7 +279,7 @@ namespace UIBlueprintEditor.Editor
 
                 _uiSizeText.Text = string.Format("Size: {0}, {1}", mainSizeX, mainSizeY);
 
-                _uiComponentInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
+                _uiElementInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
                 _tabProperties.IsEnabled = false;
             }
 
@@ -294,14 +289,14 @@ namespace UIBlueprintEditor.Editor
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
                 // loops through each component in each layer
-                foreach (var uiComponent in layer.Internal.Elements)
+                foreach (var uiElement in layer.Internal.Elements)
                 {
                     // the ui will only render if the Visible property of the layer is true
                     if (layer.Internal.Visible || ShowAllUI)
                     {
                         Canvas parentCanvas = widgetCanvas ?? _uiCanvas;
 
-                        LoadElement.Load(uiComponent, isWidget, Movement, rootObject, parentCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
+                        LoadElement.Load(uiElement, isWidget, _movement, rootObject, parentCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
                     }
                 }
             }
@@ -326,9 +321,9 @@ namespace UIBlueprintEditor.Editor
             // so if you pan out it wont zoom from the center which is annoying and idk how i would fix it
             _uiSize.RenderTransformOrigin = new Point(0.5, 0.5);
 
-            _uiSize.RenderTransform = transformGroup;
+            _uiSize.RenderTransform = _transformGroup;
 
-            double scale = scaleTransform.ScaleX;
+            double scale = _scaleTransform.ScaleX;
 
             if (zoomOut)
             {
@@ -343,8 +338,8 @@ namespace UIBlueprintEditor.Editor
 
             scale = Clamp(scale, minZoom, maxZoom);
 
-            scaleTransform.ScaleX = scale;
-            scaleTransform.ScaleY = scale;
+            _scaleTransform.ScaleX = scale;
+            _scaleTransform.ScaleY = scale;
 
             // sets the background grid so that it looks like the background is also zooming in/out
             _backgroundGrid.Viewport = new Rect(0, 0, scale * 28, scale * 28);
@@ -378,10 +373,10 @@ namespace UIBlueprintEditor.Editor
         {
             if (e.ChangedButton == MouseButton.Middle)
             {
-                panning = true;
+                _panning = true;
 
                 startPositionPan = Mouse.GetPosition(this);
-                lastPosition = new Point(translateTransform.X, translateTransform.Y);
+                lastPosition = new Point(_translateTransform.X, _translateTransform.Y);
             }
         }
 
@@ -389,13 +384,13 @@ namespace UIBlueprintEditor.Editor
         {
             if (e.ChangedButton == MouseButton.Middle)
             {
-                panning = false;
+                _panning = false;
             }
         }
 
         private void UICanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (panning)
+            if (_panning)
             {
                 Point mousePosition = e.GetPosition(this);
                 Point newPosition = new Point(mousePosition.X, mousePosition.Y);
@@ -411,10 +406,10 @@ namespace UIBlueprintEditor.Editor
                 // pans from the center
                 _uiSize.RenderTransformOrigin = new Point(0.5, 0.5);
 
-                _uiSize.RenderTransform = transformGroup;
+                _uiSize.RenderTransform = _transformGroup;
 
-                translateTransform.X = lastPosition.X + (newPosition.X - startPositionPan.X) * panMultiplier;
-                translateTransform.Y = lastPosition.Y + (newPosition.Y - startPositionPan.Y) * panMultiplier;
+                _translateTransform.X = lastPosition.X + (newPosition.X - startPositionPan.X) * panMultiplier;
+                _translateTransform.Y = lastPosition.Y + (newPosition.Y - startPositionPan.Y) * panMultiplier;
 
                 // changing the background grid
 
@@ -454,7 +449,7 @@ namespace UIBlueprintEditor.Editor
 
             if (isPrecise)
             {
-                roundTo = 1;
+                RoundTo = 1;
 
                 App.Logger.Log("Turned Precise Movement on");
 
@@ -463,7 +458,7 @@ namespace UIBlueprintEditor.Editor
             }
             else
             {
-                roundTo = Config.Get("PreciseMovementSetting", 25);
+                RoundTo = Config.Get("PreciseMovementSetting", 25);
 
                 App.Logger.Log("Turned Precise Movement off");
 
@@ -476,10 +471,10 @@ namespace UIBlueprintEditor.Editor
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             // clears all the dictionaries for the textures
-            mappingIdToMapping.Clear();
-            mappingMinValue.Clear();
-            mappingMaxValue.Clear();
-            mappingTexture.Clear();
+            MappingIdToMapping.Clear();
+            MappingMinValue.Clear();
+            MappingMaxValue.Clear();
+            MappingTexture.Clear();
 
             // clears everything in the ui canvas
             _uiCanvas.Children.Clear();
@@ -489,6 +484,8 @@ namespace UIBlueprintEditor.Editor
             LoadUI(openedAsset, false, null);
 
             _uiCanvas.UpdateLayout();
+
+            _tabControl.SelectedIndex = 0;
 
             App.Logger.Log("Refreshed UI");
         }

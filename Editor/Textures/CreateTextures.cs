@@ -14,12 +14,12 @@ namespace UIBlueprintEditor.Editor.Textures
 {
     public class CreateTextures
     {
-        static bool debugging = UIEditor.debugging;
+        private static bool _debugging = UIEditor.Debugging;
 
-        static Dictionary<dynamic, dynamic> mappingIdToMapping = UIEditor.mappingIdToMapping;
-        static Dictionary<dynamic, dynamic> mappingMinValue = UIEditor.mappingMinValue;
-        static Dictionary<dynamic, dynamic> mappingMaxValue = UIEditor.mappingMaxValue;
-        static Dictionary<dynamic, BitmapImage> mappingTexture = UIEditor.mappingTexture;
+        private static Dictionary<dynamic, dynamic> _mappingIdToMapping = UIEditor.MappingIdToMapping;
+        private static Dictionary<dynamic, dynamic> _mappingMinValue = UIEditor.MappingMinValue;
+        private static Dictionary<dynamic, dynamic> _mappingMaxValue = UIEditor.MappingMaxValue;
+        private static Dictionary<dynamic, BitmapImage> _mappingTexture = UIEditor.MappingTexture;
 
         // this is a separate method so we can check the TextureId for each bitmap entity
         // which should make loading times faster since a texture doesn't need to be created for every output entry
@@ -28,7 +28,7 @@ namespace UIBlueprintEditor.Editor.Textures
             // loops through every texture mapping asset in the ui blueprint
             foreach (var textureItem in rootObject.Object.Internal.TextureMappings)
             {
-                if (debugging)
+                if (_debugging)
                 {
                     App.Logger.Log("texture");
                 }
@@ -46,7 +46,7 @@ namespace UIBlueprintEditor.Editor.Textures
                     // if the texture isn't used in the ui we're loading we will skip creating the texture
                     // there can also be more than one texture id of the same name
 
-                    if (outputEntry.Id == textureId && !mappingIdToMapping.ContainsKey(outputEntry.Id))
+                    if (outputEntry.Id == textureId && !_mappingIdToMapping.ContainsKey(outputEntry.Id))
                     {
                         var min = outputEntry.Min;
                         var max = outputEntry.Max;
@@ -63,17 +63,15 @@ namespace UIBlueprintEditor.Editor.Textures
 
                         Texture texture = App.AssetManager.GetResAs<Texture>(App.AssetManager.GetResEntry(textureRes));
 
-                        mappingIdToMapping.Add(outputEntry.Id, outputEntry);
-                        mappingMinValue.Add(outputEntry.Id, min);
-                        mappingMaxValue.Add(outputEntry.Id, max);
+                        _mappingIdToMapping.Add(outputEntry.Id, outputEntry);
+                        _mappingMinValue.Add(outputEntry.Id, min);
+                        _mappingMaxValue.Add(outputEntry.Id, max);
 
-                        TextureExporterToMemory.Export(texture);
-
-                        byte[] textureBytes = TextureExporterToMemory.textureBytes;
+                        byte[] textureBytes = TextureExporterToMemory.Export(texture);
 
                         BitmapImage bitmap = CreateBitmap(textureBytes);
 
-                        mappingTexture.Add(outputEntry.Id, bitmap);
+                        _mappingTexture.Add(outputEntry.Id, bitmap);
                     }
                 }
             }
