@@ -58,7 +58,7 @@ namespace UIBlueprintEditor.Editor.UI
                     Canvas parent = SelectedCanvas.Parent as Canvas;
                     dynamic rootObject = CurrentRootObject.Get();
 
-                    Canvas newCanvas = LoadElement.Load(SelectedElement, false, this, rootObject, parent, LoadUI);
+                    Canvas newCanvas = ElementLoader.LoadElement(SelectedElement, false, this, rootObject, parent, LoadUI);
 
                     if (newCanvas != null)
                     {
@@ -66,7 +66,7 @@ namespace UIBlueprintEditor.Editor.UI
 
                         parent.Children.Remove(SelectedCanvas);
 
-                        // LoadElement.Load already adds the canvas to the parent, but we want the layering
+                        // ElementLoader.LoadElement already adds the canvas to the parent, but we want the layering
                         // to be the same so it's removed then added back at the right zindex
                         parent.Children.Remove(newCanvas);
                         parent.Children.Insert(zindex, newCanvas);
@@ -335,6 +335,9 @@ namespace UIBlueprintEditor.Editor.UI
             if (SelectedCanvas == null)
                 return;
 
+            if (Keyboard.FocusedElement is TextBox)
+                return;
+
             bool movementKey = false;
 
             double left = Canvas.GetLeft(SelectedCanvas);
@@ -370,11 +373,11 @@ namespace UIBlueprintEditor.Editor.UI
                 movementKey = true;
             }
 
+            dynamic rootObject = CurrentRootObject.Get();
+
             // checks if its a movement key (wasd or arrow keys) so that nothing happens if you touch any other keys
             if (movementKey)
             {
-                dynamic rootObject = CurrentRootObject.Get();
-
                 bool useAnchor = Config.Get<bool>("UseAnchor", false);
 
                 float movedX = (float)Canvas.GetLeft(SelectedCanvas);
@@ -464,6 +467,36 @@ namespace UIBlueprintEditor.Editor.UI
                     SelectedElement.Internal.Anchor.Y,
                     guid.ToString());
             }
+
+            if (e.Key == Key.X && SelectedElement != null && SelectedCanvas != null)
+            {
+                MessageBoxResult result = FrostyMessageBox.Show($"Would you like to delete the element '{SelectedElement.Internal.InstanceName}'?", "UI Blueprint Editor", MessageBoxButton.YesNo);
+
+                if (result == MessageBoxResult.No)
+                    return;
+
+                int canvasIndex = _uiCanvas.Children.IndexOf(SelectedCanvas);
+                _uiCanvas.Children.RemoveAt(canvasIndex);
+
+                foreach (var layer in rootObject.Object.Internal.Layers)
+                {
+                    foreach (var uiElement in layer.Internal.Elements)
+                    {
+                        if (uiElement.Internal.__InstanceGuid == SelectedElement.Internal.__InstanceGuid)
+                        {
+                            layer.Internal.Elements.Remove(uiElement);
+                            break;
+                        }
+                    }
+                }
+
+                SelectedElement = null;
+                SelectedCanvas = null;
+
+                _uiElementInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
+                ((FrostyTabControl)_tabProperties.Parent).SelectedIndex = 0;
+                _tabProperties.IsEnabled = false;
+            }
         }
 
         public void UICanvasKeyUp(object sender, KeyEventArgs e)
@@ -477,6 +510,16 @@ namespace UIBlueprintEditor.Editor.UI
                 // updates the property grid tab
                 _tabPropertiesContent.Object = rootObject;
                 _tabPropertiesContent.Object = SelectedElement.Internal;
+            }
+        }
+
+        public void UICanvasMouseMove(object sender, MouseEventArgs e)
+        {
+            // this is so that the grid can be focused if it has lost focus from something else
+            Grid uiGrid = _uiElementInfo.Parent as Grid;
+            if (uiGrid.IsMouseOver)
+            {
+                _uiCanvas.Focus();
             }
         }
 

@@ -21,12 +21,12 @@ using UIBlueprintEditor.Editor.Textures;
 
 namespace UIBlueprintEditor.Editor.UI
 {
-    public class LoadElement
+    public class ElementLoader
     {
         private static bool _debugging = UIEditor.Debugging;
 
         // loads any single element
-        public static UIBlueprintElement Load(dynamic uiElement, bool isWidget, Movement Movement, dynamic rootObject, Canvas parentCanvas, Action<EbxAssetEntry, bool, Canvas> LoadUI)
+        public static UIBlueprintElement LoadElement(dynamic uiElement, bool isWidget, Movement Movement, dynamic rootObject, Canvas parentCanvas, Action<EbxAssetEntry, bool, Canvas> LoadUI)
         {
             // some settings that can be customized
             bool createImages = Config.Get("RenderTextures", true);
@@ -51,7 +51,7 @@ namespace UIBlueprintEditor.Editor.UI
                     UIEditor.MappingMaxValue.Remove(textureMapId);
                     UIEditor.MappingTexture.Remove(textureMapId);
 
-                    // gets all the textures needed for this bitmap
+                    // gets the texture needed for this bitmap
                     CreateTextures.GetTextures(rootObject, textureMapId);
 
                     // for storing the negative versions
@@ -137,13 +137,6 @@ namespace UIBlueprintEditor.Editor.UI
                     element.Children.Add(image);
 
                     return element;
-                }
-                catch (KeyNotFoundException)
-                {
-                    App.Logger.LogError($"The texture '{uiElement.Internal.TextureId}' wasn't found in '{uiElement.Internal.InstanceName}'");
-                    // most of the time this is just caused by dynamic bitmaps which change their texture id when in game
-
-                    return null;
                 }
                 catch (Exception ex)
                 {
@@ -345,8 +338,13 @@ namespace UIBlueprintEditor.Editor.UI
                 }
                 catch (NullReferenceException)
                 {
-                    // if there's no style, it'll default to white
-                    rect.Fill = Brushes.White;
+                    // if there's no style, it'll default to the color in the element
+
+                    var colorR = (byte)Math.Round(uiElement.Internal.Color.x * 255);
+                    var colorG = (byte)Math.Round(uiElement.Internal.Color.y * 255);
+                    var colorB = (byte)Math.Round(uiElement.Internal.Color.z * 255);
+
+                    rect.Fill = new SolidColorBrush(Color.FromRgb(colorR, colorG, colorB));
                 }
 
                 parentCanvas.Children.Add(element);
@@ -356,9 +354,22 @@ namespace UIBlueprintEditor.Editor.UI
             }
             else if (componentName == "FrostySdk.Ebx.UIElementButtonEntityData")
             {
-                // does nothing for buttons since they are basically just hitboxes
+                bool showHitbox = Config.Get<bool>("ShowButtonHitboxes", false);
 
-                return null;
+                UIBlueprintElement element = new UIBlueprintElement(uiElement, !showHitbox, Movement, rootObject);
+
+                var rect = new System.Windows.Shapes.Rectangle
+                {
+                    Width = element.Width,
+                    Height = element.Height,
+                    Fill = Brushes.LightBlue,
+                    Opacity = showHitbox ? 0.25 : 0,
+                };
+
+                parentCanvas.Children.Add(element);
+                element.Children.Add(rect);
+
+                return element;
             }
             else if (componentName == "FrostySdk.Ebx.UIElementWidgetReferenceEntityData" && createWidgets)
             {
@@ -466,6 +477,70 @@ namespace UIBlueprintEditor.Editor.UI
                 element.Children.Add(tb);
 
                 return element;
+            }
+        }
+
+        public static void LoadList(dynamic rootObject, Canvas parentCanvas, Movement movement, Action<EbxAssetEntry, bool, Canvas> LoadUI)
+        {
+            string incButton = rootObject.Object.Internal.IncreaseIndexButton.ToString();
+
+            bool isVertical = incButton != "UIInputAction_NavigateRight" && incButton != "UIInputAction_TabRight";
+
+            List<Guid> rows = new List<Guid>();
+
+            if (rootObject.Object.Internal.DynamicRow_Template.Type != PointerRefType.Null)
+            {
+                int defaultCount = Config.Get("DefaultRowCount", 1);
+
+                int dynamicCount = rootObject.Object.Internal.DynamicRowCount;
+                int count = dynamicCount == 0 ? defaultCount : dynamicCount;
+
+                for (int i = 0; i < count; i++)
+                {
+                    rows.Add(((PointerRef)rootObject.Object.Internal.DynamicRow_Template).External.FileGuid);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < rootObject.Object.Internal.Rows.Count; i++)
+                {
+                    var row = rootObject.Object.Internal.Rows[i];
+                    rows.Add(((PointerRef)row.Internal.RowTemplate).External.FileGuid);
+                }
+            }
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var widgetGuid = rows[i];
+                var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
+
+                EbxAsset widgetAsset = App.AssetManager.GetEbx(widgetEbx);
+                dynamic rootObjectWidget = widgetAsset.RootObject;
+
+                foreach (var layer in rootObjectWidget.Object.Internal.Layers)
+                {
+                    foreach (var uiElement in layer.Internal.Elements)
+                    {
+                        UIBlueprintElement canvas = LoadElement(uiElement, true, movement, rootObjectWidget, parentCanvas, LoadUI);
+
+                        if (canvas == null)
+                            return;
+
+                        TransformGroup transformGroupRow = new TransformGroup();
+
+                        var offsetX = rootObjectWidget.Object.Internal.Size.X * i;
+                        var offsetY = rootObjectWidget.Object.Internal.Size.Y * i;
+                        TranslateTransform translateTransformRow = new TranslateTransform(isVertical ? 0 : offsetX, isVertical ? offsetY : 0);
+
+                        if (canvas.RenderTransform == null)
+                        {
+                            canvas.RenderTransform = transformGroupRow;
+                        }
+
+                        transformGroupRow = (TransformGroup)canvas.RenderTransform;
+                        transformGroupRow.Children.Add(translateTransformRow);
+                    }
+                }
             }
         }
     }

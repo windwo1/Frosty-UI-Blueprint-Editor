@@ -1,16 +1,21 @@
 using Frosty.Controls;
 using Frosty.Core;
 using Frosty.Core.Controls;
+using Frosty.Core.Windows;
+using FrostySdk;
+using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
 using FrostySdk.IO;
 using FrostySdk.Managers;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using UIBlueprintEditor.Editor.Misc;
 using UIBlueprintEditor.Editor.UI;
 
 namespace UIBlueprintEditor.Editor
@@ -39,6 +44,7 @@ namespace UIBlueprintEditor.Editor
     [TemplatePart(Name = PART_TabProperties, Type = typeof(FrostyTabItem))]
     [TemplatePart(Name = PART_TabPropertiesContent, Type = typeof(FrostyPropertyGrid))]
     [TemplatePart(Name = PART_TabControl, Type = typeof(FrostyTabControl))]
+    [TemplatePart(Name = PART_TabToolboxContent, Type = typeof(StackPanel))]
     #endregion
     public class UIEditor : FrostyAssetEditor
     {
@@ -65,6 +71,7 @@ namespace UIBlueprintEditor.Editor
         private const string PART_TabProperties = "PART_TabProperties";
         private const string PART_TabPropertiesContent = "PART_TabPropertiesContent";
         private const string PART_TabControl = "PART_TabControl";
+        private const string PART_TabToolboxContent = "PART_TabToolboxContent";
 
         private Button _switchViewButton;
         private FrameworkElement _uiEditorLayer;
@@ -77,7 +84,6 @@ namespace UIBlueprintEditor.Editor
         private ColumnDefinition _column1;
         private ColumnDefinition _columnSplitter;
         private ColumnDefinition _column2;
-        private FrostyTabItem _tabLayers;
         private FrostyTabItem _tabToolbox;
         private FrostyTabControl _tabControl;
         private Canvas _uiCanvas;
@@ -88,9 +94,7 @@ namespace UIBlueprintEditor.Editor
         private TextBlock _uiElementInfo;
         private FrostyTabItem _tabProperties;
         private FrostyPropertyGrid _tabPropertiesContent;
-        private StackPanel _tabLayersContent;
-        private Button _tabLayersUp;
-        private Button _tabLayersDown;
+        private StackPanel _tabToolboxContent;
         #endregion
 
         public static readonly bool Debugging = false; // make this 'true' to have a lot of useful info logged
@@ -105,7 +109,6 @@ namespace UIBlueprintEditor.Editor
         public static int RoundTo = 1;
 
         private Movement _movement;
-        private Canvas _selectedLayer;
         private TransformGroup _transformGroup;
         private ScaleTransform _scaleTransform;
         private TranslateTransform _translateTransform;
@@ -184,13 +187,19 @@ namespace UIBlueprintEditor.Editor
             _tabProperties = GetTemplateChild(PART_TabProperties) as FrostyTabItem;
 
             _tabPropertiesContent = GetTemplateChild(PART_TabPropertiesContent) as FrostyPropertyGrid;
+            _tabToolboxContent = GetTemplateChild(PART_TabToolboxContent) as StackPanel;
 
             _tabControl = GetTemplateChild(PART_TabControl) as FrostyTabControl;
 
-            // arrow key/WASD precise movement
+            foreach (Button button in _tabToolboxContent.Children)
+            {
+                button.Click += (sender, e) => { ToolboxButton_Click(sender, e, _tabToolboxContent.Children.IndexOf(button)); };
+            }
+
             _movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiElementInfo, _tabProperties, _tabPropertiesContent);
             KeyDown += _movement.UICanvasKeyDown;
             KeyUp += _movement.UICanvasKeyUp;
+            MouseMove += _movement.UICanvasMouseMove;
         }
         #endregion
 
@@ -243,14 +252,8 @@ namespace UIBlueprintEditor.Editor
                 MappingMaxValue.Clear();
                 MappingTexture.Clear();
 
-                _tabLayersContent.Children.Clear();
-
                 _movement.SelectedElement = null;
                 _movement.SelectedCanvas = null;
-
-                _selectedLayer = null;
-                _tabLayersUp.IsEnabled = false;
-                _tabLayersDown.IsEnabled = false;
             }
         }
 
@@ -285,6 +288,8 @@ namespace UIBlueprintEditor.Editor
 
             bool ShowAllUI = Config.Get("ShowAllUI", false);
 
+            Canvas parentCanvas = widgetCanvas ?? _uiCanvas;
+
             // loops through the "Layers"
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
@@ -294,16 +299,185 @@ namespace UIBlueprintEditor.Editor
                     // the ui will only render if the Visible property of the layer is true
                     if (layer.Internal.Visible || ShowAllUI)
                     {
-                        Canvas parentCanvas = widgetCanvas ?? _uiCanvas;
-
-                        LoadElement.Load(uiElement, isWidget, _movement, rootObject, parentCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
+                        ElementLoader.LoadElement(uiElement, isWidget, _movement, rootObject, parentCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
                     }
                 }
+            }
+
+            // lists / rows
+            if (rootObject.Object.Internal.ToString() == "FrostySdk.Ebx.UIListWidgetData")
+            {
+                ElementLoader.LoadList(rootObject, parentCanvas, _movement, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
             }
 
             // update layout once everything is loaded
             _uiCanvas.UpdateLayout();
         }
+
+        #region Toolbox Tab
+        private void ToolboxButton_Click(object sender, RoutedEventArgs e, int index)
+        {
+            switch (index)
+            {
+                case 0:
+                    AddItem("PVZUIElementBitmapEntityData");
+                    break;
+                case 1:
+                    AddItem("PVZUIElementTextFieldEntityData");
+                    break;
+                case 2:
+                    AddItem("PVZUIElementFillEntityData");
+                    break;
+                case 3:
+                    AddItem("UIElementWidgetReferenceEntityData");
+                    break;
+                case 4:
+                    AddItem("other");
+                    break;
+            }
+        }
+
+        private void AddItem(string item)
+        {
+            EbxAssetEntry openedAsset = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+
+            EbxAsset asset = App.AssetManager.GetEbx(openedAsset);
+            dynamic rootObject = asset.RootObject;
+
+            List<PointerRef> layers = rootObject.Object.Internal.Layers;
+
+            dynamic layer = null;
+            if (layers.Count > 0)
+            {
+                layer = layers.Last();
+            }
+
+            if (layer == null || layer.Internal.LayerName != "UIBlueprintEditor Layer")
+            {
+                dynamic layerObj = TypeLibrary.CreateObject("UIElementLayerEntityData");
+
+                // default settings
+                layerObj.LayerName = "UIBlueprintEditor Layer";
+                layerObj.Visible = true;
+                layerObj.InclusionSettings.IsSingleplayerLayer = true;
+                layerObj.InclusionSettings.IsMultiplayerLayer = true;
+                layerObj.InclusionSettings.IsSDLayer = true;
+                layerObj.InclusionSettings.IsHDLayer = true;
+
+                layerObj.SetInstanceGuid(new AssetClassGuid(Guid.NewGuid(), -1));
+
+                asset.AddObject(layerObj);
+                PointerRef layerRef = new PointerRef(internalRef: layerObj);
+
+                layer = layerRef;
+
+                layers.Add(layerRef);
+            }
+
+            if (item == "other")
+            {
+                List<Type> types = new List<Type>();
+                foreach (Type type in TypeLibrary.GetTypes("GameDataContainer"))
+                {
+                    types.Add(type);
+                }
+
+                ClassSelector classSelector = new ClassSelector(types.ToArray());
+                if (classSelector.ShowDialog() == true)
+                {
+                    if (classSelector.SelectedClass != null)
+                    {
+                        item = classSelector.SelectedClass.Name;
+                    }
+                }
+            }
+
+            dynamic element = TypeLibrary.CreateObject(item);
+            asset.AddObject(element);
+            PointerRef elementRef = new PointerRef(internalRef: element);
+
+            #region Default Settings
+
+            try
+            {
+                ApplyBasicSettings(element);
+            }
+            catch
+            {
+                App.Logger.LogError("Must be a UI element");
+                asset.RemoveObject(element);
+                return;
+            }
+
+            switch (item)
+            {
+                case "PVZUIElementBitmapEntityData":
+                    element.UVRect.z = (float)1;
+                    element.UVRect.w = (float)1;
+                    element.DistanceFieldParams.AlphaThreshold = (float)0.496;
+                    element.DistanceFieldParams.DistanceScale = (float)5;
+                    element.DistanceFieldParams.OutlineColor.Rgb.x = (float)1;
+                    element.DistanceFieldParams.OutlineColor.Rgb.y = (float)1;
+                    element.DistanceFieldParams.OutlineColor.Rgb.z = (float)1;
+                    element.DistanceFieldParams.OutlineColor.Alpha = (float)1;
+                    element.BlendMode = Enum.Parse(element.BlendMode.GetType(), "UIBlendMode_AlphaBlend");
+                    break;
+                case "PVZUIElementTextFieldEntityData":
+                    element.Text.Sid = "Lorem Ipsum";
+                    element.Text.Wordwrap = true;
+                    element.FontStyle = new PointerRef(App.AssetManager.GetEbxEntry("UI/Font/Styles/Cafeteria42pt").Guid);
+                    element.AutoAdjustLeftPadding = (float)5;
+                    element.AutoAdjustRightPadding = (float)5;
+                    element.TextScale = (float)1;
+                    element.VerticalAlignOverride = -1;
+                    element.HorizontalAlignOverride = -1;
+                    break;
+                case "PVZUIElementFillEntityData":
+                    element.BackgroundBlendMode = Enum.Parse(element.BackgroundBlendMode.GetType(), "UIBlendMode_AlphaBlend");
+                    element.OutlineBlendMode = Enum.Parse(element.OutlineBlendMode.GetType(), "UIBlendMode_AlphaBlend");
+                    element.DrawBackground = true;
+                    element.DrawOutline = true;
+                    break;
+                case "UIElementWidgetReferenceEntityData":
+                    element.CastSunShadowEnable = true;
+                    element.CastReflectionEnable = true;
+                    element.CastEnvmapEnable = true;
+                    element.LocalPlayerId = Enum.Parse(element.LocalPlayerId.GetType(), "LocalPlayerId_Invalid");
+                    element.InclusionSettings.IsSingleplayerLayer = true;
+                    element.InclusionSettings.IsMultiplayerLayer = true;
+                    element.InclusionSettings.IsSDLayer = true;
+                    element.InclusionSettings.IsHDLayer = true;
+                    break;
+            }
+            #endregion
+
+            layer.Internal.Elements.Add(elementRef);
+
+            ElementLoader.LoadElement(elementRef, false, _movement, rootObject, _uiCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
+
+            App.AssetManager.ModifyEbx(rootObject.Name, asset);
+            App.EditorWindow.DataExplorer.RefreshItems();
+        }
+
+        private void ApplyBasicSettings(dynamic element)
+        {
+            element.InstanceName = "New Element";
+            element.InstanceNameHash = 3907910727;
+            element.UIElementTransform.RotationPivot.x = (float)0.5;
+            element.UIElementTransform.RotationPivot.y = (float)0.5;
+            element.Size.X = (float)256;
+            element.Size.Y = (float)256;
+            element.Anchor.X = (float)0.5;
+            element.Anchor.Y = (float)0.5;
+            element.Color.x = (float)1;
+            element.Color.y = (float)1;
+            element.Color.z = (float)1;
+            element.Alpha = (float)1;
+            try { element.Visible = true; } catch { } // widget references dont have the visible property
+
+            element.SetInstanceGuid(new AssetClassGuid(Guid.NewGuid(), -1));
+        }
+        #endregion
 
         #region Zooming
         private void UICanvas_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -432,6 +606,8 @@ namespace UIBlueprintEditor.Editor
             {
                 canvas.Visibility = Visibility.Visible;
             }
+
+            App.Logger.Log(((Grid)_zoomPercent.Parent).Background.ToString());
         }
 
         // switches between the roundTo value and 1 which changes how precise ui dragging is
