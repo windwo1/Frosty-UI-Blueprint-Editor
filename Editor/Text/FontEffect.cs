@@ -5,8 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -44,21 +42,17 @@ namespace UIBlueprintEditor.Editor.Text
                     {
                         try
                         {
-                            if (effectArray.Length == 1) // if the effect has no arguments (for example: Merge, Clear...)
+                            if (effectArray.Length == 1)
                             {
                                 switch (effectName)
                                 {
                                     case "DrawGlyph":
-                                        // draws the text
-
                                         if (currentValues.ContainsKey("SetGlyphColor"))
                                         {
                                             tb.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(currentValues["SetGlyphColor"]));
                                         }
                                         break;
                                     case "DrawGlyphSmearOutline":
-                                        // draws an outline
-
                                         SolidColorBrush color = new SolidColorBrush((Color)ColorConverter.ConvertFromString(currentValues["SetGlyphColor"]));
 
                                         // 'AdornerLayer.GetAdornerLayer()' will return null if this isn't used
@@ -67,7 +61,6 @@ namespace UIBlueprintEditor.Editor.Text
                                             ClipToBounds = true,
                                         };
 
-                                        // this basically copies everything that was done when first rendering the text field
                                         var borderStroke = new Border
                                         {
                                             Width = border.Width,
@@ -88,10 +81,8 @@ namespace UIBlueprintEditor.Editor.Text
                                             RenderTransform = tb.RenderTransform,
                                         };
 
-                                        // sets it below the tb
                                         Panel.SetZIndex(stroke, Panel.GetZIndex(tb) - 1);
 
-                                        // sets an offset if it exists
                                         if (currentValues.ContainsKey("SetGlyphOffset"))
                                         {
                                             string[] offset = currentValues["SetGlyphOffset"].Split(',');
@@ -102,7 +93,6 @@ namespace UIBlueprintEditor.Editor.Text
                                             borderStroke.Margin = new Thickness(x, y, 0, 0);
                                         }
 
-                                        // if there is no "SetGlyphBrush" it will use 5 for the default thickness
                                         ushort thickness = 5;
                                         if (currentValues.ContainsKey("SetGlyphBrush"))
                                         {
@@ -130,8 +120,6 @@ namespace UIBlueprintEditor.Editor.Text
                                         adorner.Add(strokeAdorner);
                                         break;
                                     case "Merge":
-                                        // moves onto the next part
-
                                         currentValues.Clear();
                                         break;
                                     case "Clear":
@@ -143,7 +131,6 @@ namespace UIBlueprintEditor.Editor.Text
                             }
                             else
                             {
-                                // these are the arugments for each effect (most of the time there is only one)
                                 // the first index is skipped because that is just the name of the effect
                                 string[] effectValues = effectArray.Skip(1).ToArray();
 
@@ -152,11 +139,8 @@ namespace UIBlueprintEditor.Editor.Text
                                     case "SetGlyphColor":
                                         string value = effectValues[0];
 
-                                        // removes the first 4 characters (0xff) and puts a '#' before it
-                                        // sometimes the hex doesnt include the 'ff' after '0x' so only 2 is cut off
                                         string fullHex = value.Remove(0, value.Length > 8 ? 4 : 2).Insert(0, "#");
 
-                                        // this will limit the hex from being longer than 7 (not 6 because the '#' is included)
                                         string hex = fullHex.Remove(7, fullHex.Length - 7);
 
                                         currentValues.Add("SetGlyphColor", hex);
@@ -167,9 +151,6 @@ namespace UIBlueprintEditor.Editor.Text
                                         currentValues.Add("SetGlyphOffset", offset);
                                         break;
                                     case "SetGlyphBrush":
-                                        // this gets the second value (index 1) for the size, there are actually 4 arguments
-                                        // but we only really need the size. the full arguments are: uint32_t shape, size, hardness, opacity
-
                                         string size = effectValues[1];
 
                                         currentValues.Add("SetGlyphBrush", size);

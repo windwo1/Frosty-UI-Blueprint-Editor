@@ -6,10 +6,6 @@ using FrostySdk.IO;
 using FrostySdk.Managers;
 using Microsoft.CSharp.RuntimeBinder;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -33,14 +29,17 @@ namespace UIBlueprintEditor.Editor.UI
         public dynamic SelectedElement;
 
         private bool _dragging = false;
-        private bool _debugging = UIEditor.Debugging;
-        private Point startPosition;
-        private Action<EbxAssetEntry, bool, Canvas> LoadUI;
-        private bool showHitboxes = Config.Get("ShowHitboxes", true);
+        private Point _startPosition;
+        private Action<dynamic, bool, Canvas> _loadUI;
+        private bool _showHitboxes = Config.Get("ShowHitboxes", true);
 
-        public Movement(Action<EbxAssetEntry, bool, Canvas> LoadUI, Canvas _uiCanvas, Button _refreshButton, Button _preciseButton, Button _unhideButton, TextBlock _uiSizeText, TextBlock _uiElementInfo, FrostyTabItem _tabProperties, FrostyPropertyGrid _tabPropertiesContent)
+        private EbxAssetEntry _ebxEntry;
+        private EbxAsset _ebxAsset;
+        private dynamic _rootObject;
+
+        public Movement(Action<dynamic, bool, Canvas> LoadUI, Canvas _uiCanvas, Button _refreshButton, Button _preciseButton, Button _unhideButton, TextBlock _uiSizeText, TextBlock _uiElementInfo, FrostyTabItem _tabProperties, FrostyPropertyGrid _tabPropertiesContent)
         {
-            this.LoadUI = LoadUI;
+            _loadUI = LoadUI;
 
             this._uiCanvas = _uiCanvas;
             this._refreshButton = _refreshButton;
@@ -51,14 +50,17 @@ namespace UIBlueprintEditor.Editor.UI
             this._tabProperties = _tabProperties;
             this._tabPropertiesContent = _tabPropertiesContent;
 
+            _ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+            _ebxAsset = App.AssetManager.GetEbx(_ebxEntry);
+            _rootObject = _ebxAsset.RootObject;
+
             _tabPropertiesContent.OnModified += (sender, e) =>
             {
                 if (SelectedCanvas != null && SelectedElement != null)
                 {
                     Canvas parent = SelectedCanvas.Parent as Canvas;
-                    dynamic rootObject = CurrentRootObject.Get();
 
-                    Canvas newCanvas = ElementLoader.LoadElement(SelectedElement, false, this, rootObject, parent, LoadUI);
+                    Canvas newCanvas = ElementLoader.LoadElement(SelectedElement, false, this, _rootObject, parent, LoadUI);
 
                     if (newCanvas != null)
                     {
@@ -87,9 +89,78 @@ namespace UIBlueprintEditor.Editor.UI
             };
         }
 
-        #region Dragging
+		private void SetPosition(float movedX, float movedY)
+		{
+			bool useAnchor = Config.Get<bool>("UseAnchor", false);
 
-        public void ControlUI(Canvas canvas)
+			if (!useAnchor)
+			{
+				SelectedElement.Internal.Offset.X = movedX;
+				SelectedElement.Internal.Offset.Y = movedY;
+
+				SelectedElement.Internal.Anchor.X = 0;
+				SelectedElement.Internal.Anchor.Y = 0;
+			}
+			else
+			{
+				var width = SelectedElement.Internal.Size.X;
+				var height = SelectedElement.Internal.Size.Y;
+
+				try
+				{
+					if (!SelectedElement.Internal.UseElementSize)
+					{
+						var widgetGuid = ((PointerRef)SelectedElement.Internal.Blueprint).External.FileGuid;
+						var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
+
+						EbxAsset widgetAsset = App.AssetManager.GetEbx(widgetEbx);
+						dynamic rootObjectWidget = widgetAsset.RootObject;
+
+						width = rootObjectWidget.Object.Internal.Size.X;
+						height = rootObjectWidget.Object.Internal.Size.Y;
+					}
+				}
+				catch (RuntimeBinderException) { } // if it's not a widget reference
+				catch (NullReferenceException) { } // if there's no blueprint references
+
+				float x = _rootObject.Object.Internal.Size.X - width;
+				float y = _rootObject.Object.Internal.Size.Y - height;
+
+				// this is so we don't divide by 0 if the size of the element is equal to the ui size
+				if (x == 0 || y == 0)
+				{
+					App.Logger.LogError($"({SelectedElement.Internal.InstanceName}) Can't use anchor, moving by offset instead. Sorry!");
+
+					SelectedElement.Internal.Offset.X = movedX;
+					SelectedElement.Internal.Offset.Y = movedY;
+
+					SelectedElement.Internal.Anchor.X = 0;
+					SelectedElement.Internal.Anchor.Y = 0;
+				}
+				else
+				{
+					SelectedElement.Internal.Anchor.X = movedX / x;
+					SelectedElement.Internal.Anchor.Y = movedY / y;
+
+					SelectedElement.Internal.Offset.X = 0;
+					SelectedElement.Internal.Offset.Y = 0;
+				}
+			}
+		}
+
+
+        // this method exists because if we always used the same rootObject,
+        // any new elements added by the toolbox wouldn't exist in that rootObject
+        private void UpdateRootObject()
+        {
+			_ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+			_ebxAsset = App.AssetManager.GetEbx(_ebxEntry);
+			_rootObject = _ebxAsset.RootObject;
+		}
+
+		#region Dragging
+
+		public void ControlUI(Canvas canvas)
         {
             canvas.MouseMove += CanvasMouseMove;
             canvas.MouseLeftButtonDown += CanvasMouseDown;
@@ -108,8 +179,7 @@ namespace UIBlueprintEditor.Editor.UI
 
             _dragging = true;
 
-            // gets the mouse position
-            startPosition = Mouse.GetPosition(_uiCanvas);
+            _startPosition = Mouse.GetPosition(_uiCanvas);
         }
 
         private void CanvasMouseUp(object sender, MouseButtonEventArgs e)
@@ -119,12 +189,11 @@ namespace UIBlueprintEditor.Editor.UI
             Canvas canvas = sender as Canvas;
             SelectedCanvas = canvas;
 
-            if (showHitboxes)
+            if (_showHitboxes)
             {
                 canvas.Background = new SolidColorBrush(Color.FromArgb(15, 157, 198, 252));
             }
 
-            // reset ZIndex after moving it
             Panel.SetZIndex(canvas, 0);
 
             double roundedX = Math.Round(Canvas.GetLeft(canvas) / UIEditor.RoundTo) * UIEditor.RoundTo;
@@ -133,11 +202,9 @@ namespace UIBlueprintEditor.Editor.UI
             float movedX = (float)roundedX;
             float movedY = (float)roundedY;
 
-            // sets the position
             Canvas.SetLeft(canvas, roundedX);
             Canvas.SetTop(canvas, roundedY);
 
-            // gets the Guid of the canvas from the tag created earlier so we can use it as an ebx asset
             var canvasGuid = canvas.Tag;
 
             _refreshButton.Visibility = Visibility.Visible;
@@ -146,110 +213,29 @@ namespace UIBlueprintEditor.Editor.UI
             _uiSizeText.Visibility = Visibility.Visible;
             _uiElementInfo.Visibility = Visibility.Visible;
 
-            dynamic rootObject = CurrentRootObject.Get();
-
             dynamic guid = null;
 
-            // goes through every ui component until the guid of it matches the guid from the tag
-            foreach (var layer in rootObject.Object.Internal.Layers)
+			UpdateRootObject();
+			foreach (var layer in _rootObject.Object.Internal.Layers)
             {
                 foreach (var uiElement in layer.Internal.Elements)
                 {
                     guid = uiElement.Internal.__InstanceGuid;
-
-                    if (_debugging)
-                    {
-                        App.Logger.Log(Convert.ToString("Guid: " + guid));
-                        App.Logger.Log(Convert.ToString("Canvas Guid: " + canvasGuid));
-                    }
-
+                    
                     if (guid.ToString() == canvasGuid.ToString())
                     {
-                        SelectedElement = uiElement;
+						SelectedElement = uiElement;
                         break;
                     }
                 }
             }
 
-            // i dont think its possible for this to be null, but just in case
             if (SelectedElement == null)
                 return;
 
-            bool useAnchor = Config.Get<bool>("UseAnchor", false);
+            SetPosition(movedX, movedY);
 
-            if (!useAnchor)
-            {
-                // if useAnchor is false, we remove the anchor and set the position with offset
-                SelectedElement.Internal.Offset.X = movedX;
-                SelectedElement.Internal.Offset.Y = movedY;
-
-                SelectedElement.Internal.Anchor.X = 0;
-                SelectedElement.Internal.Anchor.Y = 0;
-            }
-            else
-            {
-                // if useAnchor is true, we remove the offset and set the position with anchor
-
-                var width = SelectedElement.Internal.Size.X;
-                var height = SelectedElement.Internal.Size.Y;
-
-                try
-                {
-                    if (!SelectedElement.Internal.UseElementSize)
-                    {
-                        var widgetGuid = ((PointerRef)SelectedElement.Internal.Blueprint).External.FileGuid;
-                        var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
-
-                        EbxAsset widgetAsset = App.AssetManager.GetEbx(widgetEbx);
-                        dynamic rootObjectWidget = widgetAsset.RootObject;
-
-                        width = rootObjectWidget.Object.Internal.Size.X;
-                        height = rootObjectWidget.Object.Internal.Size.Y;
-                    }
-                }
-                catch (RuntimeBinderException)
-                {
-                    // if UseElementSize can't be found that means it isn't a widget reference
-
-                    // i dont think an exception would affect these values, but just in case
-                    // they are set back to this
-                    width = SelectedElement.Internal.Size.X;
-                    height = SelectedElement.Internal.Size.Y;
-                }
-                catch (NullReferenceException) { } // if there's no blueprint references
-
-                float x = rootObject.Object.Internal.Size.X - width;
-                float y = rootObject.Object.Internal.Size.Y - height;
-
-                // this is so we don't divide by 0 if the size of the element is equal to the ui size
-                // since subtracting from the same numbers just gives you 0
-                if (x == 0 || y == 0)
-                {
-                    App.Logger.LogError($"({SelectedElement.Internal.InstanceName}) Can't use anchor, moving by offset instead. Sorry!");
-
-                    SelectedElement.Internal.Offset.X = movedX;
-                    SelectedElement.Internal.Offset.Y = movedY;
-
-                    SelectedElement.Internal.Anchor.X = 0;
-                    SelectedElement.Internal.Anchor.Y = 0;
-                }
-                else
-                {
-                    SelectedElement.Internal.Anchor.X = movedX / x;
-                    SelectedElement.Internal.Anchor.Y = movedY / y;
-
-                    SelectedElement.Internal.Offset.X = 0;
-                    SelectedElement.Internal.Offset.Y = 0;
-                }
-            }
-
-            // saves it to the ebx so that it will show up in game or in frosty
-            EbxAssetEntry ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
-            EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
-
-            App.AssetManager.ModifyEbx(rootObject.Name, asset);
-
-            // refreshes the data explorer so that it shows as modified on the left
+            App.AssetManager.ModifyEbx(_ebxEntry.Name, _ebxAsset);
             App.EditorWindow.DataExplorer.RefreshItems();
 
             _uiElementInfo.Text =
@@ -262,13 +248,7 @@ namespace UIBlueprintEditor.Editor.UI
                 SelectedElement.Internal.Anchor.Y,
                 guid.ToString());
 
-            if (_debugging)
-            {
-                App.Logger.Log("Saved Position");
-            }
-
-            // updates the property grid tab
-            _tabPropertiesContent.Object = rootObject;
+            _tabPropertiesContent.Object = _rootObject;
             _tabPropertiesContent.Object = SelectedElement.Internal;
 
             _tabProperties.IsEnabled = true;
@@ -294,7 +274,7 @@ namespace UIBlueprintEditor.Editor.UI
                     return;
                 }
 
-                if (showHitboxes)
+                if (_showHitboxes)
                 {
                     canvas.Background = new SolidColorBrush(Color.FromArgb(0, 157, 198, 252));
                 }
@@ -307,29 +287,19 @@ namespace UIBlueprintEditor.Editor.UI
                 double left = Canvas.GetLeft(canvas);
                 double top = Canvas.GetTop(canvas);
 
-                Canvas.SetLeft(canvas, left + (newPosition.X - startPosition.X));
-                Canvas.SetTop(canvas, top + (newPosition.Y - startPosition.Y));
-                startPosition = newPosition;
+                Canvas.SetLeft(canvas, left + (newPosition.X - _startPosition.X));
+                Canvas.SetTop(canvas, top + (newPosition.Y - _startPosition.Y));
+                _startPosition = newPosition;
 
                 _refreshButton.Visibility = Visibility.Hidden;
                 _preciseButton.Visibility = Visibility.Hidden;
                 _unhideButton.Visibility = Visibility.Hidden;
                 _uiSizeText.Visibility = Visibility.Hidden;
                 _uiElementInfo.Visibility = Visibility.Hidden;
-
-                if (_debugging)
-                {
-                    // this can make it very laggy if you have debugging on and not commented out
-                    //App.Logger.Log(left.ToString());
-                    //App.Logger.Log(top.ToString());
-
-                    //App.Logger.Log(roundTo.ToString());
-                }
             }
         }
         #endregion
 
-        // arrow key movement for precise movements
         public void UICanvasKeyDown(object sender, KeyEventArgs e)
         {
             if (SelectedCanvas == null)
@@ -351,7 +321,6 @@ namespace UIBlueprintEditor.Editor.UI
                 e.Handled = true;
             }
 
-            // i would've used a switch but i wanted to have both WASD and arrow keys
             if (e.Key == Key.W || e.Key == Key.Up)
             {
                 Canvas.SetTop(SelectedCanvas, top + -move);
@@ -373,86 +342,14 @@ namespace UIBlueprintEditor.Editor.UI
                 movementKey = true;
             }
 
-            dynamic rootObject = CurrentRootObject.Get();
-
-            // checks if its a movement key (wasd or arrow keys) so that nothing happens if you touch any other keys
-            if (movementKey)
+            if (movementKey && SelectedElement != null && SelectedCanvas != null)
             {
-                bool useAnchor = Config.Get<bool>("UseAnchor", false);
-
                 float movedX = (float)Canvas.GetLeft(SelectedCanvas);
                 float movedY = (float)Canvas.GetTop(SelectedCanvas);
 
-                if (!useAnchor)
-                {
-                    SelectedElement.Internal.Offset.X = movedX;
-                    SelectedElement.Internal.Offset.Y = movedY;
+				SetPosition(movedX, movedY);
 
-                    SelectedElement.Internal.Anchor.X = 0;
-                    SelectedElement.Internal.Anchor.Y = 0;
-                }
-                else
-                {
-                    // if useAnchor is true, we remove the offset and set the position with anchor
-
-                    var width = SelectedElement.Internal.Size.X;
-                    var height = SelectedElement.Internal.Size.Y;
-
-                    try
-                    {
-                        if (!SelectedElement.Internal.UseElementSize)
-                        {
-                            var widgetGuid = ((PointerRef)SelectedElement.Internal.Blueprint).External.FileGuid;
-                            var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
-
-                            EbxAsset widgetAsset = App.AssetManager.GetEbx(widgetEbx);
-                            dynamic rootObjectWidget = widgetAsset.RootObject;
-
-                            width = rootObjectWidget.Object.Internal.Size.X;
-                            height = rootObjectWidget.Object.Internal.Size.Y;
-                        }
-                    }
-                    catch (RuntimeBinderException)
-                    {
-                        // if UseElementSize can't be found that means it isn't a widget reference
-
-                        // i dont think an exception would affect these values, but just in case
-                        // they are set back to this
-                        width = SelectedElement.Internal.Size.X;
-                        height = SelectedElement.Internal.Size.Y;
-                    }
-
-                    float x = rootObject.Object.Internal.Size.X - width;
-                    float y = rootObject.Object.Internal.Size.Y - height;
-
-                    // this is so we don't divide by 0 if the size of the element is equal to the ui size
-                    if (x == 0 || y == 0)
-                    {
-                        App.Logger.LogError($"({SelectedElement.Internal.InstanceName}) Can't use anchor, moving by offset instead. Sorry!");
-
-                        SelectedElement.Internal.Offset.X = movedX;
-                        SelectedElement.Internal.Offset.Y = movedY;
-
-                        SelectedElement.Internal.Anchor.X = 0;
-                        SelectedElement.Internal.Anchor.Y = 0;
-                    }
-                    else
-                    {
-                        SelectedElement.Internal.Anchor.X = movedX / x;
-                        SelectedElement.Internal.Anchor.Y = movedY / y;
-
-                        SelectedElement.Internal.Offset.X = 0;
-                        SelectedElement.Internal.Offset.Y = 0;
-                    }
-                }
-                
-                // saves it to the ebx so that it will show up in game or in frosty
-                EbxAssetEntry ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
-                EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
-
-                App.AssetManager.ModifyEbx(rootObject.Name, asset);
-                
-                // refreshes the data explorer so that it shows as modified on the left
+				App.AssetManager.ModifyEbx(_ebxEntry.Name, _ebxAsset);
                 App.EditorWindow.DataExplorer.RefreshItems();
 
                 var guid = SelectedElement.Internal.__InstanceGuid;
@@ -468,7 +365,7 @@ namespace UIBlueprintEditor.Editor.UI
                     guid.ToString());
             }
 
-            if (e.Key == Key.X && SelectedElement != null && SelectedCanvas != null)
+            if ((e.Key == Key.X || e.Key == Key.Delete) && SelectedElement != null && SelectedCanvas != null)
             {
                 MessageBoxResult result = FrostyMessageBox.Show($"Would you like to delete the element '{SelectedElement.Internal.InstanceName}'?", "UI Blueprint Editor", MessageBoxButton.YesNo);
 
@@ -478,13 +375,14 @@ namespace UIBlueprintEditor.Editor.UI
                 int canvasIndex = _uiCanvas.Children.IndexOf(SelectedCanvas);
                 _uiCanvas.Children.RemoveAt(canvasIndex);
 
-                foreach (var layer in rootObject.Object.Internal.Layers)
+				UpdateRootObject();
+				foreach (var layer in _rootObject.Object.Internal.Layers)
                 {
                     foreach (var uiElement in layer.Internal.Elements)
                     {
                         if (uiElement.Internal.__InstanceGuid == SelectedElement.Internal.__InstanceGuid)
                         {
-                            layer.Internal.Elements.Remove(uiElement);
+							layer.Internal.Elements.Remove(uiElement);
                             break;
                         }
                     }
@@ -496,6 +394,9 @@ namespace UIBlueprintEditor.Editor.UI
                 _uiElementInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
                 ((FrostyTabControl)_tabProperties.Parent).SelectedIndex = 0;
                 _tabProperties.IsEnabled = false;
+
+                App.AssetManager.ModifyEbx(_ebxEntry.Name, _ebxAsset);
+                App.EditorWindow.DataExplorer.RefreshItems();
             }
         }
 
@@ -505,29 +406,15 @@ namespace UIBlueprintEditor.Editor.UI
             // it would just keep refreshing, not letting you to type anything
             if (!_tabPropertiesContent.IsKeyboardFocusWithin && SelectedElement != null)
             {
-                dynamic rootObject = CurrentRootObject.Get();
-
                 // updates the property grid tab
-                _tabPropertiesContent.Object = rootObject;
+                _tabPropertiesContent.Object = _rootObject;
                 _tabPropertiesContent.Object = SelectedElement.Internal;
             }
         }
 
-        public void UICanvasMouseMove(object sender, MouseEventArgs e)
-        {
-            // this is so that the grid can be focused if it has lost focus from something else
-            Grid uiGrid = _uiElementInfo.Parent as Grid;
-            if (uiGrid.IsMouseOver)
-            {
-                _uiCanvas.Focus();
-            }
-        }
-
-        // shows a transparent background when your mouse is over the canvas
-        // useful for showing where you can or can't drag certain elements
         private void CanvasMouseEnter(object sender, MouseEventArgs e)
         {
-            if (showHitboxes)
+            if (_showHitboxes)
             {
                 Canvas canvas = sender as Canvas;
 
@@ -537,7 +424,7 @@ namespace UIBlueprintEditor.Editor.UI
 
         private void CanvasMouseLeave(object sender, MouseEventArgs e)
         {
-            if (showHitboxes)
+            if (_showHitboxes)
             {
                 Canvas canvas = sender as Canvas;
 
@@ -545,10 +432,8 @@ namespace UIBlueprintEditor.Editor.UI
             }
         }
 
-        // right clicking will hide the ui, this is useful if some ui elements are in the way of something you wanna move
         private void CanvasHideUI(object sender, EventArgs e)
         {
-            // it will only work if you aren't dragging a ui element otherwise it will be buggy
             if (!_dragging)
             {
                 Canvas canvas = sender as Canvas;

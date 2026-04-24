@@ -2,6 +2,7 @@ using Frosty.Controls;
 using Frosty.Core;
 using Frosty.Core.Controls;
 using Frosty.Core.Windows;
+using Frosty.Hash;
 using FrostySdk;
 using FrostySdk.Ebx;
 using FrostySdk.Interfaces;
@@ -31,7 +32,7 @@ namespace UIBlueprintEditor.Editor
     [TemplatePart(Name = PART_Refresh, Type = typeof(Button))]
     [TemplatePart(Name = PART_Precise, Type = typeof(Button))]
     [TemplatePart(Name = PART_PreciseImage, Type = typeof(Button))]
-    [TemplatePart(Name = PART_UIComponentInfo, Type = typeof(TextBlock))]
+    [TemplatePart(Name = PART_UIElementInfo, Type = typeof(TextBlock))]
     [TemplatePart(Name = PART_Unhide, Type = typeof(Button))]
     [TemplatePart(Name = PART_UISizeText, Type = typeof(TextBlock))]
     [TemplatePart(Name = PART_ZoomPercent, Type = typeof(TextBlock))]
@@ -58,7 +59,7 @@ namespace UIBlueprintEditor.Editor
         private const string PART_Refresh = "PART_Refresh";
         private const string PART_Precise = "PART_Precise";
         private const string PART_PreciseImage = "PART_PreciseImage";
-        private const string PART_UIComponentInfo = "PART_UIComponentInfo";
+        private const string PART_UIElementInfo = "PART_UIElementInfo";
         private const string PART_Unhide = "PART_Unhide";
         private const string PART_UISizeText = "PART_UISizeText";
         private const string PART_ZoomPercent = "PART_ZoomPercent";
@@ -97,28 +98,26 @@ namespace UIBlueprintEditor.Editor
         private StackPanel _tabToolboxContent;
         #endregion
 
-        public static readonly bool Debugging = false; // make this 'true' to have a lot of useful info logged
-
-        // these dictionaries are used later to reference certain values using the TextureId as the key
         public static Dictionary<dynamic, dynamic> MappingIdToMapping = new Dictionary<dynamic, dynamic>();
         public static Dictionary<dynamic, dynamic> MappingMinValue = new Dictionary<dynamic, dynamic>();
         public static Dictionary<dynamic, dynamic> MappingMaxValue = new Dictionary<dynamic, dynamic>();
         public static Dictionary<dynamic, BitmapImage> MappingTexture = new Dictionary<dynamic, BitmapImage>();
 
-        // this is used for the precise movement / snapping
         public static int RoundTo = 1;
 
         private Movement _movement;
         private TransformGroup _transformGroup;
         private ScaleTransform _scaleTransform;
         private TranslateTransform _translateTransform;
-        private Action<object> _refreshPropertyGrid;
         private bool _editorActive = false;
         private bool _panning = false;
 
-        public UIEditor(ILogger inLogger) : base(inLogger)
+		private EbxAssetEntry _ebxEntry;
+		private EbxAsset _ebxAsset;
+		private dynamic _rootObject;
+
+		public UIEditor(ILogger inLogger) : base(inLogger)
         {
-            // pan/zoom stuff
             MouseWheel += UICanvas_MouseWheel;
             MouseDown += UICanvas_MouseDown;
             MouseUp += UICanvas_MouseUp;
@@ -161,7 +160,7 @@ namespace UIBlueprintEditor.Editor
 
             _preciseImage = GetTemplateChild(PART_PreciseImage) as Image;
 
-            _uiElementInfo = GetTemplateChild(PART_UIComponentInfo) as TextBlock;
+            _uiElementInfo = GetTemplateChild(PART_UIElementInfo) as TextBlock;
 
             _unhideButton = GetTemplateChild(PART_Unhide) as Button;
             _unhideButton.Click += UnhideButton_Click;
@@ -173,11 +172,6 @@ namespace UIBlueprintEditor.Editor
             _backgroundGrid = GetTemplateChild(PART_BackgroundGrid) as ImageBrush;
 
             _pgAsset = GetTemplateChild(PART_AssetPropertyGrid) as FrostyPropertyGrid;
-            _refreshPropertyGrid = new Action<object>((_) =>
-            {
-                _pgAsset.Object = null;
-                _pgAsset.Object = asset.RootObject;
-            });
 
             _column1 = GetTemplateChild(PART_Column1) as ColumnDefinition;
             _columnSplitter = GetTemplateChild(PART_ColumnSplitter) as ColumnDefinition;
@@ -199,42 +193,34 @@ namespace UIBlueprintEditor.Editor
             _movement = new Movement(LoadUI, _uiCanvas, _refreshButton, _preciseButton, _unhideButton, _uiSizeText, _uiElementInfo, _tabProperties, _tabPropertiesContent);
             KeyDown += _movement.UICanvasKeyDown;
             KeyUp += _movement.UICanvasKeyUp;
-            MouseMove += _movement.UICanvasMouseMove;
-        }
+            MouseDown += (sender, e) =>
+            {
+                _uiCanvas.Focus();
+            };
+
+			UpdateRootObject();
+		}
         #endregion
 
-        // switches between the default editor and the ui editor
         private void SwitchViewButton_Click(object sender, RoutedEventArgs e)
         {
-            // toggles the bool
-            _editorActive = !_editorActive;
+			_editorActive = !_editorActive;
             if (_editorActive)
             {
-                // hides the default view and shows the editor view 
-                _uiEditorLayer.Visibility = Visibility.Visible;
+				_uiEditorLayer.Visibility = Visibility.Visible;
                 _defaultEditorLayer.Visibility = Visibility.Hidden;
 
-                // sets the columns width to fit the tabs on the right
                 _column1.Width = new GridLength(0.8, GridUnitType.Star);
                 _columnSplitter.Width = new GridLength(3);
                 _column2.Width = new GridLength(0.2, GridUnitType.Star);
 
                 _tabControl.SelectedIndex = 0;
 
-                // gets the opened asset as an EbxAssetEntry
-
-                EbxAssetEntry openedAsset = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
-
-                if (openedAsset == null)
-                    return;
-
-                // loads all the ui elements with the openedAsset, isWidget as false
-                // and no widget canvas since we aren't loading a widget
-                LoadUI(openedAsset, false, null);
-            }
+                UpdateRootObject();
+                LoadUI(_rootObject, false, null);
+			}
             else
             {
-                // hides the editor view and shows the default view
                 _uiEditorLayer.Visibility = Visibility.Hidden;
                 _defaultEditorLayer.Visibility = Visibility.Visible;
 
@@ -242,12 +228,11 @@ namespace UIBlueprintEditor.Editor
                 _columnSplitter.Width = new GridLength(0);
                 _column2.Width = new GridLength(0, GridUnitType.Star);
 
-                // refreshes the asset that you're on so any changes you made won't be overwritten if you
-                // change something in the normal editor
-                _refreshPropertyGrid.Invoke(null);
+                // refreshes the property grid
+                _pgAsset.Object = null;
+				_pgAsset.Object = _rootObject;
 
-                // clears the texture dictionaries so that new textures will be created everytime
-                MappingIdToMapping.Clear();
+				MappingIdToMapping.Clear();
                 MappingMinValue.Clear();
                 MappingMaxValue.Clear();
                 MappingTexture.Clear();
@@ -255,20 +240,10 @@ namespace UIBlueprintEditor.Editor
                 _movement.SelectedElement = null;
                 _movement.SelectedCanvas = null;
             }
-        }
+		}
 
-        // loads every asset/component in the ui blueprint that you're currently on
-        private void LoadUI(EbxAssetEntry ebxEntry, bool isWidget, Canvas widgetCanvas)
+        private void LoadUI(dynamic rootObject, bool isWidget, Canvas widgetCanvas)
         {
-            EbxAsset asset = App.AssetManager.GetEbx(ebxEntry);
-            dynamic rootObject = asset.RootObject;
-
-            if (Debugging)
-            {
-                App.Logger.Log("");
-                App.Logger.Log("---- " + rootObject.Name + " ----");
-            }
-
             float mainSizeX = rootObject.Object.Internal.Size.X;
             float mainSizeY = rootObject.Object.Internal.Size.Y;
 
@@ -280,37 +255,32 @@ namespace UIBlueprintEditor.Editor
                 _uiSize.Width = mainSizeX;
                 _uiSize.Height = mainSizeY;
 
-                _uiSizeText.Text = string.Format("Size: {0}, {1}", mainSizeX, mainSizeY);
+                _uiSizeText.Text = $"Size: {mainSizeX}, {mainSizeY}";
 
                 _uiElementInfo.Text = "InstanceName: ''\nOffset: 0, 0\nAnchor: 0, 0\n00000000-0000-0000-0000-000000000000";
                 _tabProperties.IsEnabled = false;
             }
 
-            bool ShowAllUI = Config.Get("ShowAllUI", false);
+            bool showAllUI = Config.Get("ShowAllUI", false);
 
             Canvas parentCanvas = widgetCanvas ?? _uiCanvas;
 
-            // loops through the "Layers"
             foreach (var layer in rootObject.Object.Internal.Layers)
             {
-                // loops through each component in each layer
                 foreach (var uiElement in layer.Internal.Elements)
                 {
-                    // the ui will only render if the Visible property of the layer is true
-                    if (layer.Internal.Visible || ShowAllUI)
+                    if (layer.Internal.Visible || showAllUI)
                     {
-                        ElementLoader.LoadElement(uiElement, isWidget, _movement, rootObject, parentCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
+                        ElementLoader.LoadElement(uiElement, isWidget, _movement, rootObject, parentCanvas, (Action<dynamic, bool, Canvas>)LoadUI);
                     }
                 }
             }
 
-            // lists / rows
             if (rootObject.Object.Internal.ToString() == "FrostySdk.Ebx.UIListWidgetData")
             {
-                ElementLoader.LoadList(rootObject, parentCanvas, _movement, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
+                ElementLoader.LoadList(rootObject, parentCanvas, _movement, (Action<dynamic, bool, Canvas>)LoadUI);
             }
 
-            // update layout once everything is loaded
             _uiCanvas.UpdateLayout();
         }
 
@@ -339,42 +309,36 @@ namespace UIBlueprintEditor.Editor
 
         private void AddItem(string item)
         {
-            EbxAssetEntry openedAsset = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+			List<PointerRef> layers = _rootObject.Object.Internal.Layers;
 
-            EbxAsset asset = App.AssetManager.GetEbx(openedAsset);
-            dynamic rootObject = asset.RootObject;
+			dynamic layer = null;
+			if (layers.Count > 0)
+			{
+				layer = layers.Last();
+			}
 
-            List<PointerRef> layers = rootObject.Object.Internal.Layers;
+			if (layer == null || layer.Internal.LayerName != "UIBlueprintEditor Layer")
+			{
+				dynamic layerObj = TypeLibrary.CreateObject("UIElementLayerEntityData");
 
-            dynamic layer = null;
-            if (layers.Count > 0)
-            {
-                layer = layers.Last();
-            }
+				layerObj.LayerName = "UIBlueprintEditor Layer";
+				layerObj.Visible = true;
+				layerObj.InclusionSettings.IsSingleplayerLayer = true;
+				layerObj.InclusionSettings.IsMultiplayerLayer = true;
+				layerObj.InclusionSettings.IsSDLayer = true;
+				layerObj.InclusionSettings.IsHDLayer = true;
 
-            if (layer == null || layer.Internal.LayerName != "UIBlueprintEditor Layer")
-            {
-                dynamic layerObj = TypeLibrary.CreateObject("UIElementLayerEntityData");
+				layerObj.SetInstanceGuid(new AssetClassGuid(Guid.NewGuid(), -1));
 
-                // default settings
-                layerObj.LayerName = "UIBlueprintEditor Layer";
-                layerObj.Visible = true;
-                layerObj.InclusionSettings.IsSingleplayerLayer = true;
-                layerObj.InclusionSettings.IsMultiplayerLayer = true;
-                layerObj.InclusionSettings.IsSDLayer = true;
-                layerObj.InclusionSettings.IsHDLayer = true;
+				_ebxAsset.AddObject(layerObj);
+				PointerRef layerRef = new PointerRef(internalRef: layerObj);
 
-                layerObj.SetInstanceGuid(new AssetClassGuid(Guid.NewGuid(), -1));
+				layer = layerRef;
 
-                asset.AddObject(layerObj);
-                PointerRef layerRef = new PointerRef(internalRef: layerObj);
+				layers.Add(layerRef);
+			}
 
-                layer = layerRef;
-
-                layers.Add(layerRef);
-            }
-
-            if (item == "other")
+			if (item == "other")
             {
                 List<Type> types = new List<Type>();
                 foreach (Type type in TypeLibrary.GetTypes("GameDataContainer"))
@@ -393,7 +357,7 @@ namespace UIBlueprintEditor.Editor
             }
 
             dynamic element = TypeLibrary.CreateObject(item);
-            asset.AddObject(element);
+			_ebxAsset.AddObject(element);
             PointerRef elementRef = new PointerRef(internalRef: element);
 
             #region Default Settings
@@ -405,14 +369,14 @@ namespace UIBlueprintEditor.Editor
             catch
             {
                 App.Logger.LogError("Must be a UI element");
-                asset.RemoveObject(element);
+				_ebxAsset.RemoveObject(element);
                 return;
             }
 
             switch (item)
             {
                 case "PVZUIElementBitmapEntityData":
-                    element.UVRect.z = (float)1;
+					element.UVRect.z = (float)1;
                     element.UVRect.w = (float)1;
                     element.DistanceFieldParams.AlphaThreshold = (float)0.496;
                     element.DistanceFieldParams.DistanceScale = (float)5;
@@ -423,9 +387,9 @@ namespace UIBlueprintEditor.Editor
                     element.BlendMode = Enum.Parse(element.BlendMode.GetType(), "UIBlendMode_AlphaBlend");
                     break;
                 case "PVZUIElementTextFieldEntityData":
-                    element.Text.Sid = "Lorem Ipsum";
+					element.Text.Sid = "Lorem Ipsum";
                     element.Text.Wordwrap = true;
-                    element.FontStyle = new PointerRef(App.AssetManager.GetEbxEntry("UI/Font/Styles/Cafeteria42pt").Guid);
+                    element.FontStyle = CreateRef("UI/Font/Styles/Cafeteria36pt");
                     element.AutoAdjustLeftPadding = (float)5;
                     element.AutoAdjustRightPadding = (float)5;
                     element.TextScale = (float)1;
@@ -433,13 +397,14 @@ namespace UIBlueprintEditor.Editor
                     element.HorizontalAlignOverride = -1;
                     break;
                 case "PVZUIElementFillEntityData":
-                    element.BackgroundBlendMode = Enum.Parse(element.BackgroundBlendMode.GetType(), "UIBlendMode_AlphaBlend");
+					element.BackgroundBlendMode = Enum.Parse(element.BackgroundBlendMode.GetType(), "UIBlendMode_AlphaBlend");
                     element.OutlineBlendMode = Enum.Parse(element.OutlineBlendMode.GetType(), "UIBlendMode_AlphaBlend");
                     element.DrawBackground = true;
                     element.DrawOutline = true;
+                    element.Style = CreateRef("UI/Style/HUD/GenericFillWhite");
                     break;
                 case "UIElementWidgetReferenceEntityData":
-                    element.CastSunShadowEnable = true;
+					element.CastSunShadowEnable = true;
                     element.CastReflectionEnable = true;
                     element.CastEnvmapEnable = true;
                     element.LocalPlayerId = Enum.Parse(element.LocalPlayerId.GetType(), "LocalPlayerId_Invalid");
@@ -453,17 +418,17 @@ namespace UIBlueprintEditor.Editor
 
             layer.Internal.Elements.Add(elementRef);
 
-            ElementLoader.LoadElement(elementRef, false, _movement, rootObject, _uiCanvas, (Action<EbxAssetEntry, bool, Canvas>)LoadUI);
-
-            App.AssetManager.ModifyEbx(rootObject.Name, asset);
+            App.AssetManager.ModifyEbx(_ebxEntry.Name, _ebxAsset);
             App.EditorWindow.DataExplorer.RefreshItems();
-        }
+
+			ElementLoader.LoadElement(elementRef, false, _movement, _rootObject, _uiCanvas, (Action<dynamic, bool, Canvas>)LoadUI);
+		}
 
         private void ApplyBasicSettings(dynamic element)
         {
-            element.InstanceName = "New Element";
-            element.InstanceNameHash = 3907910727;
-            element.UIElementTransform.RotationPivot.x = (float)0.5;
+			element.InstanceName = "New Element";
+			element.InstanceNameHash = (uint)Fnv1.HashString(element.InstanceName.ToString().ToLower());
+			element.UIElementTransform.RotationPivot.x = (float)0.5;
             element.UIElementTransform.RotationPivot.y = (float)0.5;
             element.Size.X = (float)256;
             element.Size.Y = (float)256;
@@ -477,22 +442,32 @@ namespace UIBlueprintEditor.Editor
 
             element.SetInstanceGuid(new AssetClassGuid(Guid.NewGuid(), -1));
         }
+
+        private PointerRef CreateRef(string assetPath)
+        {
+            EbxAssetEntry entry = App.AssetManager.GetEbxEntry(assetPath);
+            EbxAsset refAsset = App.AssetManager.GetEbx(entry);
+
+            _ebxAsset.AddDependency(entry.Guid);
+
+            return new PointerRef(new EbxImportReference()
+            {
+                FileGuid = entry.Guid,
+                ClassGuid = refAsset.RootInstanceGuid
+            });
+        }
         #endregion
 
         #region Zooming
         private void UICanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            // if e.Delta is less than 0, we're zooming out
             bool zoomOut = e.Delta < 0;
 
             double maxZoom = 3;
             double minZoom = 0.2;
 
-            // this value is how much it will be zoomed by
             double zoomValue = 0.1;
 
-            // this is the center of '_uiSize' and not the center of the screen
-            // so if you pan out it wont zoom from the center which is annoying and idk how i would fix it
             _uiSize.RenderTransformOrigin = new Point(0.5, 0.5);
 
             _uiSize.RenderTransform = _transformGroup;
@@ -501,12 +476,10 @@ namespace UIBlueprintEditor.Editor
 
             if (zoomOut)
             {
-                // zoom out
                 scale -= zoomValue;
             }
             else
             {
-                // zoom in
                 scale += zoomValue;
             }
 
@@ -515,7 +488,6 @@ namespace UIBlueprintEditor.Editor
             _scaleTransform.ScaleX = scale;
             _scaleTransform.ScaleY = scale;
 
-            // sets the background grid so that it looks like the background is also zooming in/out
             _backgroundGrid.Viewport = new Rect(0, 0, scale * 28, scale * 28);
 
             _zoomPercent.Text = Math.Round(scale * 100) + "% Zoom";
@@ -569,15 +541,9 @@ namespace UIBlueprintEditor.Editor
                 Point mousePosition = e.GetPosition(this);
                 Point newPosition = new Point(mousePosition.X, mousePosition.Y);
 
-                double panMultiplier;
-
-                // this will make it so the pan multiplier will scale with the size of the ui blueprint
-                // otherwise on small ui blueprints the panning would be too fast or too slow on some UIs
-
                 double averageSize = (_uiSize.ActualWidth + _uiSize.ActualHeight) / 2;
-                panMultiplier = averageSize / 850; // the '850' is basically the overall speed
+                double panMultiplier = averageSize / 850;
 
-                // pans from the center
                 _uiSize.RenderTransformOrigin = new Point(0.5, 0.5);
 
                 _uiSize.RenderTransform = _transformGroup;
@@ -585,41 +551,36 @@ namespace UIBlueprintEditor.Editor
                 _translateTransform.X = lastPosition.X + (newPosition.X - startPositionPan.X) * panMultiplier;
                 _translateTransform.Y = lastPosition.Y + (newPosition.Y - startPositionPan.Y) * panMultiplier;
 
-                // changing the background grid
-
-                // creates a new translate transform which is basically the same as the other one
-                // but it doesnt multiply by panMultiplier, otherwise it would be too fast
                 TranslateTransform gridTransform = new TranslateTransform();
                 gridTransform.X = lastPosition.X + (newPosition.X - startPositionPan.X);
                 gridTransform.Y = lastPosition.Y + (newPosition.Y - startPositionPan.Y);
 
-                // then its just set to the transform
                 _backgroundGrid.Transform = new MatrixTransform(gridTransform.Value);
             }
         }
-        #endregion
+		#endregion
 
-        public void UnhideButton_Click(object sender, RoutedEventArgs e)
+		private void UpdateRootObject()
+		{
+			_ebxEntry = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
+			_ebxAsset = asset;
+			_rootObject = _ebxAsset.RootObject;
+		}
+
+		public void UnhideButton_Click(object sender, RoutedEventArgs e)
         {
-            // loops through each canvas in _uiCanvas and sets them all visible
             foreach (Canvas canvas in _uiCanvas.Children)
             {
                 canvas.Visibility = Visibility.Visible;
             }
-
-            App.Logger.Log(((Grid)_zoomPercent.Parent).Background.ToString());
         }
 
-        // switches between the roundTo value and 1 which changes how precise ui dragging is
-        // idk why i didn't just call it "Snapping" lol
         private bool isPrecise = true;
 
         public void PreciseButton_Click(object sender, RoutedEventArgs e)
         {
-            // toggles the bool
             isPrecise = !isPrecise;
 
-            // gets the icon for the off and on icons
             ImageSource offIcon = new ImageSourceConverter().ConvertFromString("pack://application:,,,/UIBlueprintEditor;component/Images/Precise_OFF.png") as ImageSource;
             ImageSource onIcon = new ImageSourceConverter().ConvertFromString("pack://application:,,,/UIBlueprintEditor;component/Images/Precise_ON.png") as ImageSource;
 
@@ -643,27 +604,24 @@ namespace UIBlueprintEditor.Editor
             }
         }
 
-        // refreshes the ui editor
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            // clears all the dictionaries for the textures
             MappingIdToMapping.Clear();
             MappingMinValue.Clear();
             MappingMaxValue.Clear();
             MappingTexture.Clear();
 
-            // clears everything in the ui canvas
             _uiCanvas.Children.Clear();
 
-            // reloads all the ui
-            EbxAssetEntry openedAsset = App.EditorWindow.GetOpenedAssetEntry() as EbxAssetEntry;
-            LoadUI(openedAsset, false, null);
+            LoadUI(_rootObject, false, null);
 
             _uiCanvas.UpdateLayout();
 
             _tabControl.SelectedIndex = 0;
 
-            App.Logger.Log("Refreshed UI");
+			UpdateRootObject();
+
+			App.Logger.Log("Refreshed UI");
         }
     }
 }

@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 	<PropertyGroup>
-		<Configurations>Developer;Release</Configurations>
+		<Configurations>Developer - Debug;Release - Alpha;Release - Beta;Release - Final</Configurations>
 		<Platforms>x64</Platforms>
 		<TargetFrameworks>net48</TargetFrameworks>
 		<AssemblyTitle>UIBlueprintEditorPlugin</AssemblyTitle>
@@ -11,17 +11,33 @@
 		<OutputType>Library</OutputType>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Developer|x64'">
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Developer - Debug|x64' ">
 		<DebugSymbols>true</DebugSymbols>
 		<OutputPath>bin\Developer\Debug\</OutputPath>
-		<DefineConstants>DEBUG;TRACE</DefineConstants>
+		<DefineConstants>TRACE;DEBUG;DEVELOPER_DEBUG</DefineConstants>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release - Alpha|x64' ">
+		<OutputPath>bin\Release\Alpha\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release - Beta|x64'">
+		<OutputPath>bin\Release\Beta\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release - Final|x64'">
 		<OutputPath>bin\Release\Final\</OutputPath>
 		<DefineConstants>TRACE</DefineConstants>
 		<Optimize>true</Optimize>
 	</PropertyGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="xcopy /Y $(TargetPath) $(SolutionDir)$(OutDir)Plugins\" />
+	</Target>
 
 	<ItemGroup>
 	  <None Remove="Images\Grid.png" />
@@ -38,30 +54,21 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Reference Include="FrostyControls">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\FrostyControls.dll</HintPath>
-		</Reference>
-		<Reference Include="FrostyCore">
-			<HintPath>D:\Documents\gw2 stuff\FrostyEditor\FrostyCore.dll</HintPath>
-		</Reference>
-		<Reference Include="FrostyHash">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\FrostyHash.dll</HintPath>
-		</Reference>
-		<Reference Include="FrostySdk">
-			<HintPath>D:\Documents\gw2 stuff\FrostyEditor\FrostySdk.dll</HintPath>
-		</Reference>
-		<Reference Include="LocalizedStringPlugin">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\Plugins\LocalizedStringPlugin.dll</HintPath>
-		</Reference>
+	  <ProjectReference Include="..\..\FrostyControls\FrostyControls.csproj" />
+	  <ProjectReference Include="..\..\FrostyHash\FrostyHash.vcxproj" />
+	  <ProjectReference Include="..\..\FrostyPlugin\FrostyCore.csproj" />
+	  <ProjectReference Include="..\..\FrostySdk\FrostySdk.csproj" />
+	  <ProjectReference Include="..\LocalizedStringPlugin\LocalizedStringPlugin.csproj" />
+	  <ProjectReference Include="..\TexturePlugin\TexturePlugin.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Reference Include="Microsoft.CSharp" />
 		<Reference Include="SharpDX.Direct3D11">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\ThirdParty\SharpDX.Direct3D11.dll</HintPath>
+		  <HintPath>..\..\FrostyEditor\bin\Developer\Debug\ThirdParty\SharpDX.Direct3D11.dll</HintPath>
 		</Reference>
 		<Reference Include="SharpDX.DXGI">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\ThirdParty\SharpDX.DXGI.dll</HintPath>
-		</Reference>
-		<Reference Include="TexturePlugin">
-		  <HintPath>..\..\gw2 stuff\FrostyEditor\Plugins\TexturePlugin.dll</HintPath>
+		  <HintPath>..\..\FrostyEditor\bin\Developer\Debug\ThirdParty\SharpDX.DXGI.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 

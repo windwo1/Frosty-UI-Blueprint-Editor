@@ -1,10 +1,8 @@
-﻿using Frosty.Core;
-using Frosty.Core.Viewport;
+﻿using Frosty.Core.Viewport;
 using FrostySdk.Attributes;
 using FrostySdk.Ebx;
 using FrostySdk.IO;
 using FrostySdk.Resources;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using D3D11 = SharpDX.Direct3D11;

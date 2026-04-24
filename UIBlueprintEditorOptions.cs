@@ -43,17 +43,17 @@ namespace UIBlueprintEditor
 
         [Category("Rendering")]
         [DisplayName("Render Textures")]
-        [Description("Textures are used for bitmap entities, they will be rendered if set to true, if not they will be an 'Unrecognized Component'")]
+        [Description("Textures are used for bitmap entities, they will be rendered if set to true, if not they will be an 'Unrecognized Element'")]
         public bool RenderTextures { get; set; } = true;
 
         [Category("Rendering")]
         [DisplayName("Render Text")]
-        [Description("Text fields are used for text, they will be rendered if set to true, if not they will be an 'Unrecognized Component'")]
+        [Description("Text fields are used for text, they will be rendered if set to true, if not they will be an 'Unrecognized Element'")]
         public bool RenderText { get; set; } = true;
 
         [Category("Rendering")]
         [DisplayName("Render Widgets")]
-        [Description("Widgets contain other UI blueprints, they will be rendered if set to true, if not they will be an 'Unrecognized Component' (can make loading times faster)")]
+        [Description("Widgets contain other UI blueprints, they will be rendered if set to true, if not they will be an 'Unrecognized Element' (can make loading times faster)")]
         public bool RenderWidgets { get; set; } = true;
 
         [Category("Rendering")]

@@ -5,17 +5,11 @@ using FrostySdk.Managers;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Numerics;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
-using UIBlueprintEditor.Editor.Misc;
 using UIBlueprintEditor.Editor.Text;
 using UIBlueprintEditor.Editor.Textures;
 
@@ -23,12 +17,8 @@ namespace UIBlueprintEditor.Editor.UI
 {
     public class ElementLoader
     {
-        private static bool _debugging = UIEditor.Debugging;
-
-        // loads any single element
-        public static UIBlueprintElement LoadElement(dynamic uiElement, bool isWidget, Movement Movement, dynamic rootObject, Canvas parentCanvas, Action<EbxAssetEntry, bool, Canvas> LoadUI)
+        public static UIBlueprintElement LoadElement(dynamic uiElement, bool isWidget, Movement Movement, dynamic rootObject, Canvas parentCanvas, Action<dynamic, bool, Canvas> LoadUI)
         {
-            // some settings that can be customized
             bool createImages = Config.Get("RenderTextures", true);
             bool createWidgets = Config.Get("RenderWidgets", true);
             bool createText = Config.Get("RenderText", true);
@@ -36,9 +26,9 @@ namespace UIBlueprintEditor.Editor.UI
 
             bool showAllUI = Config.Get("ShowAllUI", false);
 
-            var componentName = uiElement.Internal.ToString();
+            var elementName = uiElement.Internal.ToString();
 
-            if ((componentName == "FrostySdk.Ebx.UIElementBitmapEntityData" || componentName == "FrostySdk.Ebx.PVZUIElementBitmapEntityData" || componentName == "FrostySdk.Ebx.PVZUIElementDynamicBitmapEntityData") && createImages)
+            if ((elementName == "FrostySdk.Ebx.UIElementBitmapEntityData" || elementName == "FrostySdk.Ebx.PVZUIElementBitmapEntityData" || elementName == "FrostySdk.Ebx.PVZUIElementDynamicBitmapEntityData") && createImages)
             {
                 try
                 {
@@ -51,10 +41,8 @@ namespace UIBlueprintEditor.Editor.UI
                     UIEditor.MappingMaxValue.Remove(textureMapId);
                     UIEditor.MappingTexture.Remove(textureMapId);
 
-                    // gets the texture needed for this bitmap
                     CreateTextures.GetTextures(rootObject, textureMapId);
 
-                    // for storing the negative versions
                     double originalWidth = element.OriginalWidth;
                     double originalHeight = element.OriginalHeight;
 
@@ -67,14 +55,12 @@ namespace UIBlueprintEditor.Editor.UI
 
                     try
                     {
-                        // gets the needed texture from the dictionary created earlier with the texture map id as the key
                         image.Source = UIEditor.MappingTexture[textureMapId];
 
                         var uvRectFull = uiElement.Internal.UVRect;
                         Vector4 uvRect = new Vector4(uvRectFull.x, uvRectFull.y, uvRectFull.z, uvRectFull.w);
 
-                        // all the values needed for cropping a bitmap
-                        // they are multiplied by the width/height because min/max values start from 0 - 1
+                        // these are multiplied by the width/height because min/max values start from 0 - 1
                         double minX = UIEditor.MappingMinValue[textureMapId].x * element.Width;
                         double minY = UIEditor.MappingMinValue[textureMapId].y * element.Height;
                         double maxX = UIEditor.MappingMaxValue[textureMapId].x * element.Width;
@@ -83,7 +69,6 @@ namespace UIBlueprintEditor.Editor.UI
                         Point min = new Point(minX, minY);
                         Point max = new Point(maxX, maxY);
 
-                        // Clip is used to crop the texture
                         image.Clip = new RectangleGeometry(new Rect(min, max));
                         RenderOptions.SetBitmapScalingMode(image, bitmapScalingMode: BitmapScalingMode.Fant);
 
@@ -103,7 +88,6 @@ namespace UIBlueprintEditor.Editor.UI
                             scaleX = -originalWidth / croppedWidth;
                             scaleY = originalHeight / croppedHeight;
 
-                            // sets it back where it was
                             image.Margin = new Thickness(element.Width, 0, 0, 0);
                         }
                         else
@@ -120,7 +104,6 @@ namespace UIBlueprintEditor.Editor.UI
                     }
                     catch (KeyNotFoundException)
                     {
-                        // if the texture wasn't found, it'll just use a placeholder orange image
                         BitmapImage texture = new BitmapImage();
 
                         texture.BeginInit();
@@ -145,7 +128,7 @@ namespace UIBlueprintEditor.Editor.UI
                     return null;
                 }
             }
-            else if ((componentName == "FrostySdk.Ebx.UIElementTextFieldEntityData" || componentName == "FrostySdk.Ebx.PVZUIElementTextFieldEntityData") && createText)
+            else if ((elementName == "FrostySdk.Ebx.UIElementTextFieldEntityData" || elementName == "FrostySdk.Ebx.PVZUIElementTextFieldEntityData") && createText)
             {
                 UIBlueprintElement element = new UIBlueprintElement(uiElement, isWidget, Movement, rootObject);
 
@@ -163,12 +146,10 @@ namespace UIBlueprintEditor.Editor.UI
                 string sid = uiElement.Internal.Text.Sid;
                 string fieldText = uiElement.Internal.FieldText;
 
-                // some text fields use FieldText
                 string outcome = sid == "" ? fieldText : sid;
 
                 if (outcome != "")
                 {
-                    // if its an id it will use the string of the id
                     if (outcome.StartsWith("ID_"))
                     {
                         tb.Text = LocalizedStringDatabase.Current.GetString(outcome);
@@ -178,20 +159,18 @@ namespace UIBlueprintEditor.Editor.UI
                         tb.Text = outcome;
                     }
                 }
-                // if theres no text then it will just use InstanceName as the text
                 else
                 {
                     tb.Text = uiElement.Internal.InstanceName;
                 }
 
-                // basic settings
                 tb.Opacity = uiElement.Internal.Visible ? element.Opacity : 0;
                 if (showAllUI) tb.Opacity = 1;
 
                 float leftPadding = uiElement.Internal.AutoAdjustLeftPadding;
                 float rightPadding = uiElement.Internal.AutoAdjustRightPadding;
 
-                tb.Padding = new Thickness(leftPadding, 0, rightPadding, 0);
+                tb.Margin = new Thickness(leftPadding, 0, rightPadding, 0);
 
                 if (uiElement.Internal.Password)
                 {
@@ -202,66 +181,70 @@ namespace UIBlueprintEditor.Editor.UI
                     tb.TextWrapping = TextWrapping.Wrap;
                 }
 
-                // font style
-                var fontGuid = ((PointerRef)uiElement.Internal.FontStyle).External.FileGuid;
-                var fontEbx = App.AssetManager.GetEbxEntry(fontGuid);
-
-                EbxAsset fontAsset = App.AssetManager.GetEbx(fontEbx);
-                dynamic rootObjectFont = fontAsset.RootObject;
-
-                // setting the actual font
-                var fontEbxPath = rootObjectFont.Hd.Internal.FontLookup[0].FontAssetPath;
-
-                var fontEbxTTF = App.AssetManager.GetEbx(fontEbxPath);
-                ulong ttfRes = fontEbxTTF.RootObject.FontResource;
-
-                ResAssetEntry ttfResEntry = App.AssetManager.GetResEntry(ttfRes);
-
-                using (Stream ttfStream = App.AssetManager.GetRes(ttfResEntry))
+                if (((PointerRef)uiElement.Internal.FontStyle).Type != PointerRefType.Null)
                 {
-                    string fontName = "./#" + fontEbxTTF.RootObject.FontFamilyName;
+                    var fontGuid = ((PointerRef)uiElement.Internal.FontStyle).External.FileGuid;
+                    var fontEbx = App.AssetManager.GetEbxEntry(fontGuid);
 
-                    // 'HouseofTerror' font has a space for some reason
-                    if (fontName == "./#MonsterFonts-HouseofTerror")
+                    EbxAsset fontAsset = App.AssetManager.GetEbx(fontEbx);
+                    dynamic rootObjectFont = fontAsset.RootObject;
+
+                    var fontEbxPath = rootObjectFont.Hd.Internal.FontLookup[0].FontAssetPath;
+
+                    var fontEbxTTF = App.AssetManager.GetEbx(fontEbxPath);
+                    ulong ttfRes = fontEbxTTF.RootObject.FontResource;
+
+                    ResAssetEntry ttfResEntry = App.AssetManager.GetResEntry(ttfRes);
+
+                    using (Stream ttfStream = App.AssetManager.GetRes(ttfResEntry))
                     {
-                        fontName = "./#MonsterFonts HouseofTerror";
-                    }
+                        string fontName = "./#" + fontEbxTTF.RootObject.FontFamilyName;
 
-                    string tempFile = Path.Combine(Path.GetTempPath(),
-                        string.Format("{0:X16}.ttf", fontEbxTTF.RootObject.FontResource));
-
-                    if (!File.Exists(tempFile))
-                    {
-                        using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.Read))
+                        // 'HouseofTerror' font has a space for some reason
+                        if (fontName == "./#MonsterFonts-HouseofTerror")
                         {
-                            ttfStream.CopyTo(fs);
+                            fontName = "./#MonsterFonts HouseofTerror";
                         }
+
+                        string tempFile = Path.Combine(Path.GetTempPath(),
+                            string.Format("{0:X16}.ttf", fontEbxTTF.RootObject.FontResource));
+
+                        if (!File.Exists(tempFile))
+                        {
+                            using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.Read))
+                            {
+                                ttfStream.CopyTo(fs);
+                            }
+                        }
+
+                        tb.FontFamily = new FontFamily(new Uri(tempFile, UriKind.Absolute), fontName);
                     }
 
-                    tb.FontFamily = new FontFamily(new Uri(tempFile, UriKind.Absolute), fontName);
+                    tb.FontSize = (double)rootObjectFont.Hd.Internal.PointSize;
                 }
-
-                tb.FontSize = (double)rootObjectFont.Hd.Internal.PointSize;
-
-                // sets the alignment of the text
-                switch (uiElement.Internal.Text.VerticalAlignment.ToString())
+                else
                 {
-                    case "UIElementAlignment_Top":
-                        tb.VerticalAlignment = VerticalAlignment.Top;
-                        break;
-                    case "UIElementAlignment_Center":
-                        tb.VerticalAlignment = VerticalAlignment.Center;
-                        break;
-                    case "UIElementAlignment_Bottom":
-                        tb.VerticalAlignment = VerticalAlignment.Bottom;
-                        break;
-                    default:
-                        tb.VerticalAlignment = VerticalAlignment.Center;
-                        break;
+                    tb.Visibility = Visibility.Hidden;
                 }
 
-                // they spelt horizontal wrong lol
-                switch (uiElement.Internal.Text.HorizonalAlignment.ToString())
+				switch (uiElement.Internal.Text.VerticalAlignment.ToString())
+				{
+					case "UIElementAlignment_Top":
+						tb.VerticalAlignment = VerticalAlignment.Top;
+						break;
+					case "UIElementAlignment_Center":
+						tb.VerticalAlignment = VerticalAlignment.Center;
+						break;
+					case "UIElementAlignment_Bottom":
+						tb.VerticalAlignment = VerticalAlignment.Bottom;
+						break;
+					default:
+						tb.VerticalAlignment = VerticalAlignment.Top;
+						break;
+				}
+
+				// they spelt horizontal wrong lol
+				switch (uiElement.Internal.Text.HorizonalAlignment.ToString())
                 {
                     case "UIElementAlignment_Left":
                         tb.TextAlignment = TextAlignment.Left;
@@ -276,18 +259,7 @@ namespace UIBlueprintEditor.Editor.UI
                         tb.TextAlignment = TextAlignment.Center;
                         break;
                 }
-
-                if (_debugging)
-                {
-                    App.Logger.Log(uiElement.Internal.Text.HorizonalAlignment.ToString());
-                    App.Logger.Log(uiElement.Internal.Text.VerticalAlignment.ToString());
-
-                    App.Logger.Log(tb.HorizontalAlignment.ToString());
-                    App.Logger.Log(tb.VerticalAlignment.ToString());
-                }
-
-                // font effect
-
+                
                 try
                 {
                     if (createFontEffects)
@@ -300,7 +272,7 @@ namespace UIBlueprintEditor.Editor.UI
                         fontEffect.Apply(tb, border, element, fontEffectEbx);
                     }
                 }
-                catch (NullReferenceException) { } // if the font effect is null
+                catch (NullReferenceException) { }
 
                 parentCanvas.Children.Add(element);
                 element.Children.Add(border);
@@ -308,7 +280,7 @@ namespace UIBlueprintEditor.Editor.UI
 
                 return element;
             }
-            else if (componentName == "FrostySdk.Ebx.UIElementFillEntityData" || componentName == "FrostySdk.Ebx.PVZUIElementFillEntityData")
+            else if (elementName == "FrostySdk.Ebx.UIElementFillEntityData" || elementName == "FrostySdk.Ebx.PVZUIElementFillEntityData")
             {
                 UIBlueprintElement element = new UIBlueprintElement(uiElement, isWidget, Movement, rootObject);
 
@@ -318,7 +290,6 @@ namespace UIBlueprintEditor.Editor.UI
                     Height = element.Height,
                 };
 
-                // style
                 try
                 {
                     var fillGuid = ((PointerRef)uiElement.Internal.Style).External.FileGuid;
@@ -338,13 +309,7 @@ namespace UIBlueprintEditor.Editor.UI
                 }
                 catch (NullReferenceException)
                 {
-                    // if there's no style, it'll default to the color in the element
-
-                    var colorR = (byte)Math.Round(uiElement.Internal.Color.x * 255);
-                    var colorG = (byte)Math.Round(uiElement.Internal.Color.y * 255);
-                    var colorB = (byte)Math.Round(uiElement.Internal.Color.z * 255);
-
-                    rect.Fill = new SolidColorBrush(Color.FromRgb(colorR, colorG, colorB));
+                    rect.Fill = Brushes.White;
                 }
 
                 parentCanvas.Children.Add(element);
@@ -352,7 +317,7 @@ namespace UIBlueprintEditor.Editor.UI
 
                 return element;
             }
-            else if (componentName == "FrostySdk.Ebx.UIElementButtonEntityData")
+            else if (elementName == "FrostySdk.Ebx.UIElementButtonEntityData")
             {
                 bool showHitbox = Config.Get<bool>("ShowButtonHitboxes", false);
 
@@ -363,21 +328,23 @@ namespace UIBlueprintEditor.Editor.UI
                     Width = element.Width,
                     Height = element.Height,
                     Fill = Brushes.LightBlue,
-                    Opacity = showHitbox ? 0.25 : 0,
+                    Opacity = 0.25,
                 };
 
-                parentCanvas.Children.Add(element);
-                element.Children.Add(rect);
+                if (showHitbox)
+                {
+                    parentCanvas.Children.Add(element);
+                    element.Children.Add(rect);
+                }
 
                 return element;
             }
-            else if (componentName == "FrostySdk.Ebx.UIElementWidgetReferenceEntityData" && createWidgets)
+            else if (elementName == "FrostySdk.Ebx.UIElementWidgetReferenceEntityData" && createWidgets)
             {
                 UIBlueprintElement element = new UIBlueprintElement(uiElement, isWidget, Movement, rootObject);
 
                 try
                 {
-                    // gets the reference blueprint of the widget as an EBX
                     var widgetGuid = ((PointerRef)uiElement.Internal.Blueprint).External.FileGuid;
                     var widgetEbx = App.AssetManager.GetEbxEntry(widgetGuid);
 
@@ -388,7 +355,6 @@ namespace UIBlueprintEditor.Editor.UI
 
                     if (!uiElement.Internal.UseElementSize)
                     {
-                        // if we aren't using the size of the element, we use the size of the referenced widget
                         element.Width = widgetSize.X;
                         element.Height = widgetSize.Y;
                     }
@@ -410,18 +376,12 @@ namespace UIBlueprintEditor.Editor.UI
 
                     element.Opacity = element.Opacity;
 
-                    if (_debugging)
-                    {
-                        App.Logger.Log("widget");
-                    }
-
                     Canvas.SetLeft(element, widgetFinalX);
                     Canvas.SetTop(element, widgetFinalY);
 
                     parentCanvas.Children.Add(element);
 
-                    // repeats everything with the EBX of the widget to render everything that is inside the widget
-                    LoadUI(widgetEbx, true, element);
+                    LoadUI(rootObjectWidget, true, element);
                 }
                 catch (NullReferenceException)
                 {
@@ -450,10 +410,7 @@ namespace UIBlueprintEditor.Editor.UI
             }
             else
             {
-                // creates a basic rectangle if its an unknown component
-                // if you're using this for another game this is what most ui elements will render as
-
-                App.Logger.Log("Unrecognized UI component");
+                App.Logger.Log("Unrecognized UI element");
 
                 UIBlueprintElement element = new UIBlueprintElement(uiElement, isWidget, Movement, rootObject);
 
@@ -480,7 +437,7 @@ namespace UIBlueprintEditor.Editor.UI
             }
         }
 
-        public static void LoadList(dynamic rootObject, Canvas parentCanvas, Movement movement, Action<EbxAssetEntry, bool, Canvas> LoadUI)
+        public static void LoadList(dynamic rootObject, Canvas parentCanvas, Movement movement, Action<dynamic, bool, Canvas> LoadUI)
         {
             string incButton = rootObject.Object.Internal.IncreaseIndexButton.ToString();
 
@@ -521,24 +478,27 @@ namespace UIBlueprintEditor.Editor.UI
                 {
                     foreach (var uiElement in layer.Internal.Elements)
                     {
-                        UIBlueprintElement canvas = LoadElement(uiElement, true, movement, rootObjectWidget, parentCanvas, LoadUI);
-
-                        if (canvas == null)
-                            return;
-
-                        TransformGroup transformGroupRow = new TransformGroup();
-
-                        var offsetX = rootObjectWidget.Object.Internal.Size.X * i;
-                        var offsetY = rootObjectWidget.Object.Internal.Size.Y * i;
-                        TranslateTransform translateTransformRow = new TranslateTransform(isVertical ? 0 : offsetX, isVertical ? offsetY : 0);
-
-                        if (canvas.RenderTransform == null)
+                        if (layer.Internal.Visible || Config.Get("ShowAllUI", false))
                         {
-                            canvas.RenderTransform = transformGroupRow;
-                        }
+                            UIBlueprintElement canvas = LoadElement(uiElement, true, movement, rootObjectWidget, parentCanvas, LoadUI);
 
-                        transformGroupRow = (TransformGroup)canvas.RenderTransform;
-                        transformGroupRow.Children.Add(translateTransformRow);
+                            if (canvas == null)
+                                return;
+
+                            TransformGroup transformGroupRow = new TransformGroup();
+
+                            var offsetX = rootObjectWidget.Object.Internal.Size.X * i;
+                            var offsetY = rootObjectWidget.Object.Internal.Size.Y * i;
+                            TranslateTransform translateTransformRow = new TranslateTransform(isVertical ? 0 : offsetX, isVertical ? offsetY : 0);
+
+                            if (canvas.RenderTransform == null)
+                            {
+                                canvas.RenderTransform = transformGroupRow;
+                            }
+
+                            transformGroupRow = (TransformGroup)canvas.RenderTransform;
+                            transformGroupRow.Children.Add(translateTransformRow);
+                        }
                     }
                 }
             }

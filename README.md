@@ -9,23 +9,17 @@ support UIs with "Lists" or "Rows" so if you see a UI blueprint that seems invis
 **This plugin will only work with PvZ GW2!** You can test it with other games but I'm pretty sure it won't work, 
 if you want you can edit the source to make it work for other games.
 
-## Building
-To build this plugin, open the .sln file in Visual Studio. Make sure at the top it's set to 'Release' and 'x64'.
-Then, Right click the project to add the references:
-- FrostyCore.dll
-- FrostySdk.dll
-- FrostyHash.dll
-- FrostyControls.dll
-- LocalizedStringPlugin.dll
-- TexturePlugin.dll
-- SharpDX.Direct3D11.dll
-- SharpDX.DXGI.dll
-
-You can get these from your Frosty Editor folder.
-Then just build the project by right clicking the project and clicking build, or you can press Ctrl + B. You can put the
-UIBlueprintEditor.dll in the Plugins folder in Frosty Editor.
-
 ## Update log
+v1.2.0.0
+
+- Added list/row support
+- Toolbox windows to add in brand new elements
+- Properties window to change properties in real time
+- A setting to show button hitboxes
+- A key to delete elements (X or Del)
+- Added Transform/BlueprintTransform scaling support
+- Some bug fixes and small improvements
+
 v1.1.0.2
 
 - Fixed a single line of code which messed up the anchors for widget references.

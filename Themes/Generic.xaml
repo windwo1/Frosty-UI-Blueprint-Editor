@@ -26,8 +26,8 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- Tabs -->
-                        <Border Grid.Column="2" Grid.Row="1">
-                            <Grid>
+                        <Border Grid.Column="2" Grid.Row="1" Background="{StaticResource ControlBackground}">
+                            <Grid Margin="2" Background="{StaticResource ListBackground}">
                                 <ctrl:FrostyTabControl Name="PART_TabControl" Background="Transparent" Foreground="{StaticResource FontColor}">
                                     <ctrl:FrostyTabItem x:Name="PART_TabToolbox" Icon="/UIBlueprintEditor;component/Images/Toolbox.png" Header="Toolbox" CloseButtonVisible="False">
                                         <ctrl:FrostyDockablePanel TitleBarVisible="False" Title="Toolbox" BorderVisible="False">
@@ -146,7 +146,7 @@
                                         </Grid>
                                     </Viewbox>
 
-                                    <TextBlock Panel.ZIndex="10" x:Name="PART_UIComponentInfo" Visibility="Visible" Grid.Row="1" Margin="5,5,5,5" HorizontalAlignment="Left" VerticalAlignment="Bottom" Opacity="0.5"/>
+                                    <TextBlock Panel.ZIndex="10" x:Name="PART_UIElementInfo" Visibility="Visible" Grid.Row="1" Margin="5,5,5,5" HorizontalAlignment="Left" VerticalAlignment="Bottom" Opacity="0.5"/>
 
                                     <TextBlock Panel.ZIndex="10" x:Name="PART_UISizeText" FontSize="24" Visibility="Visible" Grid.Row="1" Margin="5,5,5,5" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.8"/>
                                 </Grid>
