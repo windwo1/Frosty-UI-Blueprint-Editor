@@ -1,17 +1,15 @@
-﻿using Frosty.Core;
-using Frosty.Core.Viewport;
+﻿using Frosty.Core.Viewport;
 using FrostySdk.Attributes;
 using FrostySdk.Ebx;
 using FrostySdk.IO;
 using FrostySdk.Resources;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using D3D11 = SharpDX.Direct3D11;
 
 // Copy + pasted TextureExporter from TexturePlugin, but writes the textures to memory instead
 
-namespace UIBlueprintEditor.Editor
+namespace UIBlueprintEditor.Editor.Textures
 {
     [EbxClassMeta(EbxFieldType.Struct)]
     public class FrostyTextureSettingsItem
@@ -71,10 +69,8 @@ namespace UIBlueprintEditor.Editor
 
     public static class TextureExporterToMemory
     {
-        public static byte[] textureBytes;
-
         // this export method removes a lot of stuff so if textures are buggy then that might be why
-        public static void Export(Texture textureAsset)
+        public static byte[] Export(Texture textureAsset)
         {
             byte[] ddsData = WriteToDDS(textureAsset);
 
@@ -91,7 +87,7 @@ namespace UIBlueprintEditor.Editor
 
                 TexturePlugin.FrostyTextureEditor.ReleaseBlob(blob);
 
-                textureBytes = memoryStream.ToArray();
+                return memoryStream.ToArray();
             }
         }
 
@@ -212,7 +208,7 @@ namespace UIBlueprintEditor.Editor
                         {
                             int mipSize = (int)textureAsset.MipSizes[mip];
 
-                            srcStream.Position = mipOffsets[mip] + (mipSize * slice);
+                            srcStream.Position = mipOffsets[mip] + mipSize * slice;
                             srcStream.Read(tmpBuf, 0, mipSize);
                             writer.Write(tmpBuf, 0, mipSize);
                         }

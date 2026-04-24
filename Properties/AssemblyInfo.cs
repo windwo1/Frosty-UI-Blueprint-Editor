@@ -1,6 +1,5 @@
 ﻿using UIBlueprintEditor;
 using Frosty.Core.Attributes;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 
@@ -23,7 +22,7 @@ using System.Windows;
 
 [assembly: PluginDisplayName("UI Blueprint Editor")]
 [assembly: PluginAuthor("Window")]
-[assembly: PluginVersion("1.1.0.2")]
+[assembly: PluginVersion("1.2.0.0")]
 
 [assembly: RegisterOptionsExtension(typeof(UIEditorOptions))]
 [assembly: RegisterAssetDefinition("UIWidgetBlueprint", typeof(UIBlueprintAssetDefinition))]
